@@ -30,6 +30,8 @@ export interface TradeRecord {
   confidence: number;
   created_at: number;
   onchain_error?: string;
+  x402_tx_hash?: string;
+  x402_amount_stroops?: number;
 }
 
 export class StateStore {
@@ -64,7 +66,9 @@ export class StateStore {
         strategy_signal REAL NOT NULL DEFAULT 0,
         confidence REAL NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
-        onchain_error TEXT
+        onchain_error TEXT,
+        x402_tx_hash TEXT,
+        x402_amount_stroops INTEGER
       );
 
       CREATE TABLE IF NOT EXISTS price_history (
@@ -93,7 +97,7 @@ export class StateStore {
         @market_price, @market_timestamp, @pair_hash, @consecutive_losses,
         @policy_hash, @proof_hash, @new_state_hash, @attestation_sig,
         @x402_payment_receipt, @reasoning, @strategy_id, @strategy_signal,
-        @confidence, @created_at, @onchain_error
+        @confidence, @created_at, @onchain_error, @x402_tx_hash, @x402_amount_stroops
       )
     `);
     stmt.run(record as any);
