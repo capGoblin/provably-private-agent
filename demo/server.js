@@ -1,45 +1,43 @@
 #!/usr/bin/env node
-// Demo backend server for Provably Private Agent
-// Serves the HTML and provides API for running agent, listing trades, etc.
+// Demo backend server for Provably Private Agent.
+// Serves the HTML and provides API for running the real TS agent.
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 
 const PORT = 3000;
 const EXECUTOR_ID = 'CDDBMMWA6WYT6ZT5QRBATVEXC3IMVJQ4ZR6TREVL43WWSJ3HOKRMP4OZ';
 const AGENT_ID = 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT';
 const USER_ID = 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT';
 const ROOT = '/Users/dharshan/dev/stellar';
+const RPC_URL = 'http://localhost:8130/soroban/rpc';
+const PASSPHRASE = 'Standalone Network ; February 2017';
 
 const ENV = {
   ...process.env,
-  PATH: `/Users/dharshan/dev/stellar/.cargo/bin:${process.env.PATH}`,
+  PATH: `/Users/dharshan/dev/stellar/.cargo/bin:/Users/dharshan/dev/stellar/.nargo/bin:/Users/dharshan/dev/stellar/.bb:${process.env.PATH}`,
   XDG_CONFIG_HOME: '/Users/dharshan/dev/stellar/.config',
 };
 
-function exec(cmd) {
+function exec(cmd, opts = {}) {
   try {
-    return execSync(cmd, { env: ENV, encoding: 'utf8', timeout: 60000 });
+    return execSync(cmd, { env: ENV, encoding: 'utf8', timeout: 120000, ...opts });
   } catch (e) {
-    throw new Error(e.stderr || e.message);
+    throw new Error((e.stderr || e.message || '').toString().slice(-2000));
   }
 }
 
-function invokeRead(contractId, fn, ...args) {
-  let cmd = `stellar contract invoke --id ${contractId} --source deployer --network local --send=no -- ${fn}`;
-  for (const a of args) {
-    cmd += ` ${a}`;
-  }
+function invokeRead(fn, ...args) {
+  let cmd = `stellar contract invoke --id ${EXECUTOR_ID} --source deployer --rpc-url ${RPC_URL} --network-passphrase '${PASSPHRASE}' --send=no -- ${fn}`;
+  for (const a of args) cmd += ` ${a}`;
   return exec(cmd);
 }
 
-function invokeWrite(contractId, fn, ...args) {
-  let cmd = `stellar contract invoke --id ${contractId} --source deployer --network local --send=yes -- ${fn}`;
-  for (const a of args) {
-    cmd += ` ${a}`;
-  }
+function invokeWrite(fn, ...args) {
+  let cmd = `stellar contract invoke --id ${EXECUTOR_ID} --source deployer --rpc-url ${RPC_URL} --network-passphrase '${PASSPHRASE}' --send=yes -- ${fn}`;
+  for (const a of args) cmd += ` ${a}`;
   return exec(cmd);
 }
 
@@ -50,89 +48,59 @@ function readJSON(s) {
   try { return JSON.parse(s.substring(start, end + 1)); } catch { return null; }
 }
 
-async function runAgent() {
-  console.log('Running agent...');
-  exec('cd /Users/dharshan/dev/stellar/agent && node scripts/submit-trade.js ' +
-    `${EXECUTOR_ID} ${AGENT_ID} ${USER_ID} 1 500000000`);
-  const result = exec('cd /Users/dharshan/dev/stellar/agent && node scripts/exec-submit.js');
-  // Parse trade_id from result
-  const tradeIdMatch = result.match(/^(\d+)$/m);
-  if (!tradeIdMatch) {
-    // Could be the contract output that includes the trade ID
-    // Look for "0" or specific output
-    const lines = result.trim().split('\n').filter(l => l.trim());
-    const lastLine = lines[lines.length - 1];
-    // The contract returns u64 (trade_id), printed as a number
-    const candidateId = parseInt(lastLine);
-    if (isNaN(candidateId)) throw new Error('Could not parse trade ID from: ' + result);
-    return { trade_id: candidateId };
+/** Run the real agent end-to-end (one cycle). Returns the latest trade_id from the chain. */
+function runRealAgent() {
+  const before = parseInt(invokeRead('get_trade_count').trim().split('\n').pop()) || 0;
+  exec('cd /Users/dharshan/dev/stellar/agent && npx tsx src/index.ts --once');
+  const after = parseInt(invokeRead('get_trade_count').trim().split('\n').pop()) || before;
+  return { trade_id: after - 1, total: after };
+}
+
+/** Re-verify a stored proof off-chain with bb. */
+function reverify(id) {
+  const proofOut = invokeRead('get_proof', `--trade_id ${id}`);
+  let hex = proofOut.trim();
+  if (hex.startsWith('"') && hex.endsWith('"')) hex = hex.slice(1, -1);
+  const proofPath = `/tmp/check_proof_${id}.bin`;
+  fs.writeFileSync(proofPath, Buffer.from(hex, 'hex'));
+  try {
+    exec(`/Users/dharshan/dev/stellar/.bb/bb verify --scheme ultra_honk --oracle_hash keccak --proof_path ${proofPath} --vk_path /Users/dharshan/dev/stellar/circuits/strategy_policy/target/vk/vk`);
+    return { bb_valid: true };
+  } catch {
+    return { bb_valid: false };
   }
-  return { trade_id: parseInt(tradeIdMatch[1]) };
-}
-
-function getTrade(id) {
-  const out = invokeRead(EXECUTOR_ID, 'get_trade', `--trade_id ${id}`);
-  return readJSON(out);
-}
-
-function getTradeCount() {
-  const out = invokeRead(EXECUTOR_ID, 'get_trade_count');
-  const n = parseInt(out.trim().split('\n').pop());
-  return isNaN(n) ? 0 : n;
-}
-
-function getProof(id) {
-  // Proof is too large to pass through CLI easily; for demo, just return path
-  const out = invokeRead(EXECUTOR_ID, 'get_proof', `--trade_id ${id}`);
-  return { proof_hex: out.trim() };
-}
-
-function getVK() {
-  const out = invokeRead(EXECUTOR_ID, 'get_vk');
-  return { vk_hex: out.trim() };
-}
-
-function readFile(filePath) {
-  return fs.readFileSync(filePath);
-}
-
-function serveFile(res, filePath, contentType) {
-  const data = readFile(filePath);
-  res.writeHead(200, { 'Content-Type': contentType });
-  res.end(data);
 }
 
 const server = http.createServer(async (req, res) => {
-  // CORS for dev
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   try {
     if (req.url === '/' || req.url === '/index.html') {
-      serveFile(res, path.join(__dirname, 'index.html'), 'text/html');
+      fs.readFile(path.join(__dirname, 'index.html'), (e, data) => {
+        if (e) { res.writeHead(500); res.end('error'); return; }
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(data);
+      });
       return;
     }
 
     if (req.url === '/api/run-agent' && req.method === 'POST') {
-      const result = await runAgent();
-      const trade = getTrade(result.trade_id);
+      const result = runRealAgent();
+      const trade = readJSON(invokeRead('get_trade', `--trade_id ${result.trade_id}`));
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(trade));
+      res.end(JSON.stringify({ ...result, trade }));
       return;
     }
 
     if (req.url === '/api/trades' && req.method === 'GET') {
-      const count = getTradeCount();
+      const count = parseInt(invokeRead('get_trade_count').trim().split('\n').pop()) || 0;
       const trades = [];
       for (let i = 0; i < count; i++) {
-        const t = getTrade(i);
+        const t = readJSON(invokeRead('get_trade', `--trade_id ${i}`));
         if (t) trades.push(t);
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -142,62 +110,30 @@ const server = http.createServer(async (req, res) => {
 
     if (req.url.startsWith('/api/trade/') && req.method === 'GET') {
       const id = parseInt(req.url.split('/').pop());
-      const trade = getTrade(id);
+      const trade = readJSON(invokeRead('get_trade', `--trade_id ${id}`));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(trade));
       return;
     }
 
     if (req.url === '/api/vk' && req.method === 'GET') {
-      const vk = getVK();
+      const out = invokeRead('get_vk');
+      let hex = out.trim();
+      if (hex.startsWith('"') && hex.endsWith('"')) hex = hex.slice(1, -1);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(vk));
+      res.end(JSON.stringify({ vk_hex: hex }));
       return;
     }
 
     if (req.url.startsWith('/api/reverify/') && req.method === 'GET') {
       const id = parseInt(req.url.split('/').pop());
-      // Run bb verify + ed25519 attestation verify via verify-attestation.js
-      try {
-        const out = exec(`cd /Users/dharshan/dev/stellar/agent && node scripts/verify-attestation.js ${EXECUTOR_ID} ${id} $(cat /tmp/verifier_pub.hex) 2>&1`);
-        // Extract validity from output
-        const bbValid = !out.includes('❌ INVALID') && out.includes('✅ VALID');
-        // Also need to check attestation sig (verify-attestation already does both)
-        const attestationValid = bbValid;
-        // Also need bb verify separately for proof
-        let proofBbValid = true;
-        try {
-          // Fetch the proof and run bb verify on it
-          const proofOut = exec(`stellar contract invoke --id ${EXECUTOR_ID} --source deployer --network local --send=no -- get_proof --trade_id ${id}`);
-          let hex = proofOut.trim();
-          if (hex.startsWith('"') && hex.endsWith('"')) {
-            hex = hex.slice(1, -1);
-          }
-          require('fs').writeFileSync('/tmp/check_proof.bin', Buffer.from(hex, 'hex'));
-          exec('/Users/dharshan/dev/stellar/.bb/bb verify \
-  --scheme ultra_honk --oracle_hash keccak \
-  --proof_path /tmp/check_proof.bin \
-  --vk_path /Users/dharshan/dev/stellar/circuits/strategy_policy/target/vk');
-          proofBbValid = true;
-        } catch (e) {
-          proofBbValid = false;
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          bb_valid: proofBbValid,
-          attestation_valid: attestationValid,
-          trade_id: id,
-          raw_output: out,
-        }));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message, bb_valid: false, attestation_valid: false }));
-      }
+      const result = reverify(id);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
       return;
     }
 
-    res.writeHead(404);
-    res.end('Not found');
+    res.writeHead(404); res.end('Not found');
   } catch (e) {
     console.error('Error:', e.message);
     res.writeHead(500, { 'Content-Type': 'application/json' });
