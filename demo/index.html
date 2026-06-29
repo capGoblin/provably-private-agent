@@ -139,17 +139,32 @@
   <!-- Run agent button -->
   <div class="mt-12 p-6 bg-slate-800/50 rounded-lg border border-slate-700">
     <h2 class="text-2xl font-semibold mb-3">Run Agent (Generate Trade)</h2>
-    <p class="text-gray-400 text-sm mb-4">Click to invoke the agent: generates proof locally → verifies locally → signs attestation → submits to executor on-chain.</p>
+    <p class="text-gray-400 text-sm mb-4">Click to invoke the agent: LLM decides → generates proof locally → signs ed25519 attestation → submits to executor on-chain.</p>
     <button onclick="runAgent()" id="run-btn" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-medium glow transition">
       🚀 Run Agent (Submit Trade)
     </button>
     <div id="run-status" class="mt-4 text-sm"></div>
   </div>
 
+  <!-- Negative tests -->
+  <div class="mt-6 p-6 bg-rose-900/20 rounded-lg border border-rose-800/50">
+    <h2 class="text-2xl font-semibold mb-3 text-rose-300">Negative Tests (the punchline)</h2>
+    <p class="text-gray-400 text-sm mb-4">Show what happens when the math is violated. The contract <em>already accepted</em> the original trade — these tests show anyone can re-verify and catch fakes.</p>
+    <div class="flex flex-wrap gap-3">
+      <button onclick="runTamperTest()" id="tamper-btn" class="px-5 py-2 bg-rose-700 hover:bg-rose-800 rounded-lg font-medium">
+        🔥 Tamper Proof Byte (flip 1 bit) → Re-verify
+      </button>
+      <button onclick="runPolicyViolation()" id="policy-btn" class="px-5 py-2 bg-rose-700 hover:bg-rose-800 rounded-lg font-medium">
+        ⚠️ Generate Proof Violating Rate Limit
+      </button>
+    </div>
+    <div id="negative-status" class="mt-4 text-sm font-mono"></div>
+  </div>
+
 </div>
 
 <script>
-const EXECUTOR_ID = 'CD6WVHAYNJH4RC43XCRUWNVCYIPHTUNKGAEQCHZDYHTGMGDKEWKA4LFZ';
+const EXECUTOR_ID = 'CDDBMMWA6WYT6ZT5QRBATVEXC3IMVJQ4ZR6TREVL43WWSJ3HOKRMP4OZ';
 const NETWORK = 'local';
 const AGENT_ID = 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT';
 const USER_ID = 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT';
@@ -263,6 +278,63 @@ async function runAgent() {
 
     trades.unshift(data);
     renderTrades();
+  } catch (e) {
+    status.innerHTML = `<div class="text-red-400">❌ ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runTamperTest() {
+  const btn = document.getElementById('tamper-btn');
+  const status = document.getElementById('negative-status');
+  if (trades.length === 0) {
+    status.innerHTML = '<div class="text-yellow-400">Run the agent first to generate a trade.</div>';
+    return;
+  }
+  const id = trades[0].trade_id;
+  btn.disabled = true;
+  status.innerHTML = `<div class="text-yellow-400">⏳ Flipping 1 bit in proof for trade #${id} and re-verifying...</div>`;
+  try {
+    const res = await fetch(`/api/tamper/${id}`);
+    const data = await res.json();
+    const verdict = data.bb_valid_after_tamper
+      ? '<span class="text-red-400">⚠️ Tampered proof STILL verifies (should not happen)</span>'
+      : '<span class="text-green-400">✅ Tamper detected: bb verify REJECTED the mutated proof</span>';
+    status.innerHTML = `
+      <div class="p-3 bg-slate-900/50 border border-rose-800 rounded">
+        <div class="font-bold text-rose-300">🔥 Negative Test #1: 1-bit Proof Tamper</div>
+        <div class="text-xs text-gray-400 mt-1">Original byte ${data.original_byte} → tampered byte ${data.tampered_byte}</div>
+        <div class="mt-2">${verdict}</div>
+        <div class="text-xs text-gray-500 mt-2">${data.explanation}</div>
+      </div>
+    `;
+  } catch (e) {
+    status.innerHTML = `<div class="text-red-400">❌ ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runPolicyViolation() {
+  const btn = document.getElementById('policy-btn');
+  const status = document.getElementById('negative-status');
+  btn.disabled = true;
+  status.innerHTML = '<div class="text-yellow-400">⏳ Writing malicious Prover.toml (last_trade_ts = market_ts) and running nargo execute...</div>';
+  try {
+    const res = await fetch('/api/policy-violation');
+    const data = await res.json();
+    const verdict = data.rejected
+      ? '<span class="text-green-400">✅ Circuit rejected the policy violation</span>'
+      : '<span class="text-red-400">⚠️ Proof generated despite violation (should not happen)</span>';
+    status.innerHTML = `
+      <div class="p-3 bg-slate-900/50 border border-rose-800 rounded">
+        <div class="font-bold text-rose-300">⚠️ Negative Test #2: Policy Violation Attempt</div>
+        <div class="mt-2">${verdict}</div>
+        <div class="text-xs text-gray-500 mt-2">${data.explanation}</div>
+        <pre class="text-xs text-gray-600 mt-2 whitespace-pre-wrap">${(data.nargo_error || '').slice(-600)}</pre>
+      </div>
+    `;
   } catch (e) {
     status.innerHTML = `<div class="text-red-400">❌ ${e.message}</div>`;
   } finally {

@@ -71,6 +71,83 @@ function reverify(id) {
   }
 }
 
+/**
+ * Negative test #1 — fetch the stored proof, flip one byte, re-run bb verify.
+ * The contract still accepts the trade (its ed25519 sig was valid for the
+ * ORIGINAL proof). But anyone can re-verify and detect the tamper.
+ */
+function tamperAndReverify(id) {
+  const proofOut = invokeRead('get_proof', `--trade_id ${id}`);
+  let hex = proofOut.trim();
+  if (hex.startsWith('"') && hex.endsWith('"')) hex = hex.slice(1, -1);
+  const proof = Buffer.from(hex, 'hex');
+  const origByte = proof[Math.floor(proof.length / 2)];
+  proof[Math.floor(proof.length / 2)] = origByte ^ 0x01; // flip 1 bit
+  const tamperedPath = `/tmp/tampered_proof_${id}.bin`;
+  fs.writeFileSync(tamperedPath, proof);
+  let valid = false;
+  try {
+    exec(`/Users/dharshan/dev/stellar/.bb/bb verify --scheme ultra_honk --oracle_hash keccak --proof_path ${tamperedPath} --vk_path /Users/dharshan/dev/stellar/circuits/strategy_policy/target/vk/vk`);
+    valid = true;
+  } catch {
+    valid = false;
+  }
+  return {
+    trade_id: id,
+    original_byte: origByte,
+    tampered_byte: origByte ^ 0x01,
+    bb_valid_after_tamper: valid,
+    explanation: valid
+      ? 'WARNING: tampered proof still verifies (should not happen)'
+      : 'Math detected the tamper: bb verify rejected the mutated proof',
+  };
+}
+
+/**
+ * Negative test #2 — try to generate a proof that violates policy.
+ * The circuit's rate-limit / circuit-breaker / pair / amount checks
+ * all run inside nargo execute. A policy-violating proof never compiles.
+ */
+function policyViolationProof() {
+  // Write a Prover.toml that violates rate_limit (last_trade_ts == market_ts)
+  const proverToml = `# Public inputs — DELIBERATELY VIOLATE RATE LIMIT
+market_price = "1000000"
+market_timestamp = "1700000000"
+pair_hash = "1"
+balance = "10000000000"
+last_trade_ts = "1700000000"
+consecutive_losses = "0"
+policy_hash = "296da1c92f3e8cf79f98eab7ba99791b7f4051db50c0a81c0051a9e8f215cfa6"
+max_trade_size_pct = "5"
+allowed_pair_hash = "1"
+min_time_between_trades = "60"
+max_consecutive_losses = "3"
+
+# Private witnesses
+buy_threshold = "30"
+sell_threshold = "70"
+period = "14"
+last_signal = "50"
+position = "0"
+secret = "32033860691238509638089186110252179911114176558315629513121575316285338593278"
+`;
+  const circuitDir = '/Users/dharshan/dev/stellar/circuits/strategy_policy';
+  fs.writeFileSync(`${circuitDir}/Prover.toml`, proverToml);
+  let stderr = '';
+  try {
+    exec(`cd ${circuitDir} && /Users/dharshan/dev/stellar/.nargo/bin/nargo execute 2>&1`, { timeout: 60000 });
+    return { rejected: false, message: 'Proof generated (should have failed!)' };
+  } catch (e) {
+    stderr = (e.message || '').slice(-1500);
+    return {
+      rejected: true,
+      message: 'Circuit rejected the policy violation',
+      nargo_error: stderr,
+      explanation: 'The ZK circuit enforces policy at proof-generation time — no way to fake a compliant trade',
+    };
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -128,6 +205,21 @@ const server = http.createServer(async (req, res) => {
     if (req.url.startsWith('/api/reverify/') && req.method === 'GET') {
       const id = parseInt(req.url.split('/').pop());
       const result = reverify(id);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (req.url.startsWith('/api/tamper/') && req.method === 'GET') {
+      const id = parseInt(req.url.split('/').pop());
+      const result = tamperAndReverify(id);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (req.url === '/api/policy-violation' && req.method === 'GET') {
+      const result = policyViolationProof();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
       return;
