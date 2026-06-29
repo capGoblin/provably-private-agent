@@ -2,9 +2,13 @@
 
 > Private strategy. Public compliance. On Stellar.
 
+**Repo:** https://github.com/dharshan-qiro/stellar-private-agent
+
 A Zero-Knowledge trading agent whose strategy stays cryptographically private, but whose compliance with public policy is provably enforced. Runs on Stellar, pays via x402, verifiable on Soroban.
 
 Three personas see three views of the same data: the trader sees full trades, the regulator sees compliance audit trails, the public sees aggregate stats only.
+
+**Status:** End-to-end working. Real ZK proofs (UltraHonk) verified by `bb verify`. Real `ed25519` attestations accepted on-chain by the deployed Soroban executor.
 
 ---
 
