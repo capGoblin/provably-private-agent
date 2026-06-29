@@ -8,7 +8,12 @@ A Zero-Knowledge trading agent whose strategy stays cryptographically private, b
 
 Three personas see three views of the same data: the trader sees full trades, the regulator sees compliance audit trails, the public sees aggregate stats only.
 
-**Status:** End-to-end working. Real ZK proofs (UltraHonk) verified by `bb verify`. Real `ed25519` attestations accepted on-chain by the deployed Soroban executor.
+**Status:** End-to-end working with real LLM (MiniMax via OpenAI-compatible API). Real ZK proofs (UltraHonk) verified by `bb verify`. Real `ed25519` attestations accepted on-chain by the deployed Soroban executor.
+
+Typical agent run:
+- LLM cycle runs in ~5 tool iterations (get_market_data → run_strategy → submit_trade)
+- ZK proof: 14.5KB UltraHonk, ~250ms to generate
+- Trade submitted on-chain in ~2s, returns `trade_id` from contract event
 
 ---
 

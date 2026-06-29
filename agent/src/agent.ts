@@ -1,8 +1,9 @@
-// LLM-orchestrated trading agent using Anthropic SDK pointed at MiniMax.
-// The LLM decides what to do (fetch data, run strategy, submit trade);
-// the actual trading math is deterministic TS (z-score/RSI/HODL).
+// LLM-orchestrated trading agent using OpenAI SDK pointed at MiniMax's
+// /v1/chat/completions endpoint. The LLM decides what to do (fetch data,
+// run strategy, submit trade); the actual trading math is deterministic
+// TS (z-score/RSI/HODL).
 
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { StrategyRegistry } from './strategies/registry.js';
@@ -20,8 +21,10 @@ import { hash, stringToField } from './zk/hash.js';
 const bigIntReplacer = (_k: string, v: any) =>
   typeof v === 'bigint' ? v.toString() : v;
 
+type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
+
 export class TradingAgent {
-  private claude: Anthropic;
+  private llm: OpenAI;
   private strategies: StrategyRegistry;
   private activeStrategy: Strategy;
   private reflector: ReflectorClient;
@@ -35,7 +38,7 @@ export class TradingAgent {
     if (!config.minimaxApiKey) {
       logger.warn('MINIMAX_API_KEY not set — LLM calls will fail. Agent will run in deterministic mode.');
     }
-    this.claude = new Anthropic({
+    this.llm = new OpenAI({
       apiKey: config.minimaxApiKey || 'sk-fake-key-for-deterministic-mode',
       baseURL: config.minimaxBaseUrl,
     });
@@ -65,66 +68,90 @@ export class TradingAgent {
     });
   }
 
-  get tools(): Anthropic.Tool[] {
+  get tools(): OpenAI.Chat.Completions.ChatCompletionTool[] {
     return [
       {
-        name: 'get_market_data',
-        description: 'Fetch recent USDC/EURC or USDC/XLM price data.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            pair: { type: 'string', enum: ['USDC/EURC', 'USDC/XLM'], description: 'Trading pair' },
-            lookback: { type: 'number', description: 'Number of historical points (default 20)' },
+        type: 'function',
+        function: {
+          name: 'get_market_data',
+          description: 'Fetch recent USDC/EURC or USDC/XLM price data.',
+          parameters: {
+            type: 'object',
+            properties: {
+              pair: { type: 'string', enum: ['USDC/EURC', 'USDC/XLM'], description: 'Trading pair' },
+              lookback: { type: 'number', description: 'Number of historical points (default 20)' },
+            },
+            required: ['pair'],
           },
-          required: ['pair'],
         },
       },
       {
-        name: 'get_balance',
-        description: 'Get agent USDC balance on Stellar.',
-        input_schema: { type: 'object', properties: {} },
-      },
-      {
-        name: 'get_policy',
-        description: 'Get current trading policy (max trade size, allowed pairs, rate limits, circuit breaker).',
-        input_schema: { type: 'object', properties: {} },
-      },
-      {
-        name: 'list_strategies',
-        description: 'List all available trading strategies.',
-        input_schema: { type: 'object', properties: {} },
-      },
-      {
-        name: 'set_active_strategy',
-        description: 'Switch the active trading strategy.',
-        input_schema: {
-          type: 'object',
-          properties: { strategy_id: { type: 'string' } },
-          required: ['strategy_id'],
+        type: 'function',
+        function: {
+          name: 'get_balance',
+          description: 'Get agent USDC balance on Stellar.',
+          parameters: { type: 'object', properties: {} },
         },
       },
       {
-        name: 'run_strategy',
-        description: 'Run the active strategy on current market data. Returns the trade decision (HOLD/BUY/SELL), amount, confidence, and signal.',
-        input_schema: { type: 'object', properties: {} },
+        type: 'function',
+        function: {
+          name: 'get_policy',
+          description: 'Get current trading policy (max trade size, allowed pairs, rate limits, circuit breaker).',
+          parameters: { type: 'object', properties: {} },
+        },
       },
       {
-        name: 'submit_trade',
-        description: 'Generate ZK proof of the strategy decision + sign attestation + submit to Soroban executor contract. Returns trade ID + tx hash.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            reasoning: { type: 'string', description: 'Human-readable reasoning for this trade' },
+        type: 'function',
+        function: {
+          name: 'list_strategies',
+          description: 'List all available trading strategies.',
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'set_active_strategy',
+          description: 'Switch the active trading strategy.',
+          parameters: {
+            type: 'object',
+            properties: { strategy_id: { type: 'string' } },
+            required: ['strategy_id'],
           },
-          required: ['reasoning'],
         },
       },
       {
-        name: 'get_recent_trades',
-        description: 'Get recent trade history from local DB.',
-        input_schema: {
-          type: 'object',
-          properties: { limit: { type: 'number' } },
+        type: 'function',
+        function: {
+          name: 'run_strategy',
+          description: 'Run the active strategy on current market data. Returns the trade decision (HOLD/BUY/SELL), amount, confidence, and signal.',
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'submit_trade',
+          description: 'Generate ZK proof of the strategy decision + sign attestation + submit to Soroban executor contract. Returns trade ID + tx hash.',
+          parameters: {
+            type: 'object',
+            properties: {
+              reasoning: { type: 'string', description: 'Human-readable reasoning for this trade' },
+            },
+            required: ['reasoning'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_recent_trades',
+          description: 'Get recent trade history from local DB.',
+          parameters: {
+            type: 'object',
+            properties: { limit: { type: 'number' } },
+          },
         },
       },
     ];
@@ -132,19 +159,21 @@ export class TradingAgent {
 
   /** Run one decision cycle: LLM agent decides what to do. */
   async runCycle(): Promise<void> {
-    const messages: Anthropic.MessageParam[] = [{
+    const messages: ChatMessage[] = [{
       role: 'user',
       content: `Cycle start. Time: ${new Date().toISOString()}. Decide what to do.`,
     }];
 
     let response;
     try {
-      response = await this.claude.messages.create({
+      response = await this.llm.chat.completions.create({
         model: config.claudeModel,
         max_tokens: 4096,
-        system: this.buildSystemPrompt(),
+        messages: [
+          { role: 'system', content: this.buildSystemPrompt() },
+          ...messages,
+        ],
         tools: this.tools,
-        messages,
       });
     } catch (e: any) {
       logger.error('LLM call failed', { error: e.message });
@@ -158,41 +187,42 @@ export class TradingAgent {
     }
 
     let iterations = 0;
-    while (response.stop_reason === 'tool_use' && iterations < 10) {
+    while (response.choices[0]?.finish_reason === 'tool_calls' && iterations < 10) {
       iterations++;
-      const toolUses = response.content.filter(
-        (c): c is Anthropic.ToolUseBlock => c.type === 'tool_use',
-      );
+      const assistantMsg = response.choices[0].message;
+      messages.push(assistantMsg);
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const tu of toolUses) {
+      const toolCalls = assistantMsg.tool_calls || [];
+      for (const tc of toolCalls) {
+        // OpenAI SDK v5: tool_calls is a union; we only register functions.
+        const fn = (tc as any).function;
+        if (!fn) continue;
         try {
-          const result = await this.executeTool(tu.name, tu.input as any);
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: tu.id,
+          const args = fn.arguments ? JSON.parse(fn.arguments) : {};
+          const result = await this.executeTool(fn.name, args);
+          messages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
             content: JSON.stringify(result, bigIntReplacer),
           });
         } catch (err) {
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: tu.id,
+          messages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
             content: JSON.stringify({ error: (err as Error).message }),
-            is_error: true,
           });
         }
       }
 
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
-
       try {
-        response = await this.claude.messages.create({
+        response = await this.llm.chat.completions.create({
           model: config.claudeModel,
           max_tokens: 4096,
-          system: this.buildSystemPrompt(),
+          messages: [
+            { role: 'system', content: this.buildSystemPrompt() },
+            ...messages,
+          ],
           tools: this.tools,
-          messages,
         });
       } catch (e: any) {
         logger.error('LLM follow-up failed', { error: e.message });
@@ -200,15 +230,11 @@ export class TradingAgent {
       }
     }
 
-    const finalText = response.content
-      .filter(c => c.type === 'text')
-      .map(c => (c as Anthropic.TextBlock).text)
-      .join('\n');
-
+    const finalText = response.choices[0]?.message?.content || '';
     logger.info('Cycle complete', {
       reasoning: finalText.slice(0, 200),
       iterations,
-      tokens: response.usage.input_tokens + response.usage.output_tokens,
+      tokens: response.usage?.total_tokens ?? 0,
     });
   }
 
