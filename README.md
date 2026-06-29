@@ -26,11 +26,12 @@ This mirrors how production zkRollups (zkSync, StarkNet) and zkBridges (Wormhole
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
 │  │  AGENT (Node.js + Noir circuit + bb)                       │  │
-│  │  1. Loads private strategy + public policy                 │  │
-│  │  2. Runs Noir circuit → generates UltraHonk ZK proof       │  │
-│  │  3. Verifies proof locally via bb                           │  │
-│  │  4. Signs attestation (ed25519) over proof hash + inputs    │  │
-│  │  5. Submits trade to executor contract                     │  │
+│  │  1. Pays 0.1 XLM via x402 to unlock                        │  │
+│  │  2. Loads private strategy + public policy                 │  │
+│  │  3. Runs Noir circuit → generates UltraHonk ZK proof       │  │
+│  │  4. Verifies proof locally via bb                           │  │
+│  │  5. Signs attestation (ed25519) over proof hash + inputs    │  │
+│  │  6. Submits to executor with proof + sig + x402 receipt    │  │
 │  └────────────────────────────────────────────────────────────┘  │
 │                              │                                   │
 └──────────────────────────────┼───────────────────────────────────┘
@@ -43,15 +44,21 @@ This mirrors how production zkRollups (zkSync, StarkNet) and zkBridges (Wormhole
 │  │  • verify sig      │◄───│  • max trade size   │                │
 │  │  • store trade     │    │  • allowed pairs    │                │
 │  │  • store proof     │    │  • rate limits      │                │
-│  │  • store VK        │    │  • circuit breaker │                │
-│  └────────────────────┘    └────────────────────┘                │
+│  │  • store x402 rcpt │    │  • circuit breaker │                │
+│  │  • store VK        │    └────────────────────┘                │
+│  └────────────────────┘                                         │
+│         │ rental fee (x402)                                      │
+│         ▼                                                        │
+│  ┌────────────────────┐                                         │
+│  │  x402 FACILITATOR  │  (production: USDC SAC channel)         │
+│  └────────────────────┘                                         │
 └──────────────────────────────────────────────────────────────────┘
                                │
                                ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  THREE-PERSONA VIEW (anyone with VK)                              │
+│  THREE-PERSONA VIEW (anyone with VK + any x402 receipt)           │
 │                                                                  │
-│  Trader      → own trades + proof hashes                          │
+│  Trader      → own trades + re-verify button                      │
 │  Regulator   → all trades + full attestation audit trail          │
 │  Public      → aggregate volume + compliance rate (no internals) │
 └──────────────────────────────────────────────────────────────────┘
@@ -283,8 +290,9 @@ node agent/scripts/verify-attestation.js <EXECUTOR_ID> <TRADE_ID> <PUBKEY>
 
 ```bash
 cat .env
-# EXECUTOR_ID=CD6WVHAYNJH4RC43XCRUWNVCYIPHTUNKGAEQCHZDYHTGMGDKEWKA4LFZ
+# EXECUTOR_ID=CA7NFXAOKDLNHEFOB674RBYBYZK3MDV7A7BAP4LU6ESFSAMXGBCSRYBZ
 # (Policy contract: see deployment scripts)
+# Rental fee: 0.1 XLM per trade (1,000,000 stroops)
 ```
 
 ---
