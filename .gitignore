@@ -1,0 +1,61 @@
+# Rust / Cargo
+.cargo/
+.rustup/
+target/
+Cargo.lock
+
+# Noir / Nargo
+.nargo/
+target/
+
+# Barretenberg / bb
+.bb/
+
+# stellar-cli / project config
+.config/
+
+# Custom install scripts (keep bin/ but ignore generated)
+bin/noirup
+bin/bbup
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Python (if used)
+__pycache__/
+*.pyc
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Build artifacts
+*.wasm
+!contracts/verifier/target/wasm32v1-none/release/rs_soroban_ultrahonk.wasm
+
+# Local test state
+.env.local
+*.log
+/tmp/
+
+# Temporary test files
+/tmp/check_proof.bin
+/tmp/trade_args*.json
+/tmp/public_inputs*.json
+/tmp/verifier_priv.hex
+/tmp/verifier_pub.hex
+/tmp/tampered_proof.bin
+/tmp/circuit/
+
+# Internal project files (not part of repo)
+.claude/
+.verifier_id
+.envrc.local
+.env
+.envrc
+
+# External clone (downloaded separately by user)
+contracts/verifier/

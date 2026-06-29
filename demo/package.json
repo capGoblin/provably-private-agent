@@ -1,0 +1,10 @@
+{
+  "name": "provably-private-agent-demo",
+  "version": "1.0.0",
+  "description": "Demo backend for Provably Private Agent",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}

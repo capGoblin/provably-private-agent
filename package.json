@@ -1,0 +1,21 @@
+{
+  "name": "provably-private-agent",
+  "version": "1.0.0",
+  "description": "AI trading agent with private strategy + provable compliance on Stellar",
+  "main": "demo/server.js",
+  "scripts": {
+    "demo": "node demo/server.js",
+    "setup": "bash bin/install.sh"
+  },
+  "devDependencies": {
+    "@noble/hashes": "^2.2.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dharshan/stellar-private-agent"
+  }
+}
