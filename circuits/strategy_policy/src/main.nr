@@ -9,7 +9,7 @@
 //                     balance, last_trade_ts, consecutive_losses,
 //                     policy_hash, policy fields
 
-use dep::poseidon::poseidon2::Poseidon2;
+use dep::poseidon::poseidon::bn254;
 
 global HOLD: Field = 0;
 global BUY: Field = 1;
@@ -40,23 +40,23 @@ fn main(
     max_consecutive_losses: pub Field,
 ) -> pub (Field, Field, Field, Field) {
     // 1. Verify policy hash binds to declared policy fields
-    let computed_policy_hash = Poseidon2::hash([
+    let computed_policy_hash = bn254::hash_4([
         max_trade_size_pct,
         allowed_pair_hash,
         min_time_between_trades,
         max_consecutive_losses,
-    ], 4);
+    ]);
     assert(computed_policy_hash == policy_hash, "policy mismatch");
 
     // 2. Strategy commitment: bind proof to specific strategy params + secret
-    let strategy_commitment = Poseidon2::hash([
+    let strategy_commitment = bn254::hash_6([
         buy_threshold,
         sell_threshold,
         period,
         last_signal,
         position,
         secret,
-    ], 6);
+    ]);
 
     // 3. Pair check (cast to u64 for comparison)
     let pair_u: u64 = pair_hash as u64;
@@ -101,13 +101,13 @@ fn main(
     } else {
         position
     };
-    let new_state_hash = Poseidon2::hash([
+    let new_state_hash = bn254::hash_5([
         strategy_commitment,
         new_position,
         market_price,
         market_timestamp,
         consecutive_losses,
-    ], 5);
+    ]);
 
     (action, amount as Field, new_state_hash, policy_hash)
 }
@@ -115,7 +115,8 @@ fn main(
 #[test]
 fn test_hold_decision() {
     // price = 5000, buy_trigger = 3000, sell_trigger = 7000 -> HOLD
-    let policy_hash = Poseidon2::hash([5, 1, 600, 3], 4);
+    let policy_hash = bn254::hash_4([5, 1, 600, 3]);
+    std::println(f"policy_hash = {policy_hash}");
     let result = main(
         30, 70, 14, 50, 0, 42,
         5000, 1700000000, 1,
@@ -129,7 +130,7 @@ fn test_hold_decision() {
 #[test]
 fn test_buy_decision() {
     // price = 2000 < buy_trigger = 3000 -> BUY
-    let policy_hash = Poseidon2::hash([5, 1, 600, 3], 4);
+    let policy_hash = bn254::hash_4([5, 1, 600, 3]);
     let result = main(
         30, 70, 14, 50, 0, 42,
         2000, 1700000000, 1,
@@ -143,7 +144,7 @@ fn test_buy_decision() {
 #[test]
 fn test_sell_decision() {
     // price = 8000 > sell_trigger = 7000 -> SELL
-    let policy_hash = Poseidon2::hash([5, 1, 600, 3], 4);
+    let policy_hash = bn254::hash_4([5, 1, 600, 3]);
     let result = main(
         30, 70, 14, 50, 0, 42,
         8000, 1700000000, 1,
@@ -156,7 +157,7 @@ fn test_sell_decision() {
 
 #[test(should_fail_with = "pair not allowed")]
 fn test_pair_not_allowed() {
-    let policy_hash = Poseidon2::hash([5, 1, 600, 3], 4);
+    let policy_hash = bn254::hash_4([5, 1, 600, 3]);
     let _ = main(
         30, 70, 14, 50, 0, 42,
         5000, 1700000000, 999,
@@ -168,7 +169,7 @@ fn test_pair_not_allowed() {
 
 #[test(should_fail_with = "circuit breaker active")]
 fn test_circuit_breaker() {
-    let policy_hash = Poseidon2::hash([5, 1, 600, 3], 4);
+    let policy_hash = bn254::hash_4([5, 1, 600, 3]);
     let _ = main(
         30, 70, 14, 50, 0, 42,
         5000, 1700000000, 1,

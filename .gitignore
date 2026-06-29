@@ -8,6 +8,13 @@ Cargo.lock
 .nargo/
 target/
 
+# Agent SQLite + test files
+agent/.data/
+agent/node_modules/
+*.bak
+nargo_check*
+
+
 # Barretenberg / bb
 .bb/
 
