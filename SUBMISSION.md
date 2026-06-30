@@ -35,17 +35,19 @@ The strategy internals never leak. Anyone can re-verify the math independently.
 
 | Component | Status |
 |-----------|--------|
-| TypeScript agent with LLM tool-use loop | ✅ Real (Anthropic SDK → MiniMax M2.5) |
+| TypeScript agent with LLM tool-use loop | ✅ Real (OpenAI SDK → MiniMax M2.5) |
 | Z-score mean reversion strategy | ✅ Real (20-period rolling z-score, ±2σ thresholds) |
 | Reflector oracle client | ✅ Real client; synthetic fallback for offline demo |
 | ZK proof generation | ✅ Real (nargo execute + bb prove, UltraHonk, 14.5KB) |
-| Off-chain Poseidon BN254 hashing | ✅ Real (matches Noir's classic Poseidon) |
+| Off-chain Poseidon BN254 hashing | ✅ Real (matches Noir's classic Poseidon via poseidon-lite) |
 | ed25519 attestation signing | ✅ Real (keccak256 over proof + public inputs) |
 | On-chain trade submission | ✅ Real (deployed executor at `CDDBMMWA6WYT6ZT5QRBATVEXC3IMVJQ4ZR6TREVL43WWSJ3HOKRMP4OZ`) |
-| x402 payment | ✅ Real (Stellar tx before each trade) |
-| SQLite persistence | ✅ Real (better-sqlite3) |
-| Three-persona demo UI | ✅ Real (vanilla HTML + Tailwind) |
-| Soroswap DEX swap | ⏳ Mocked in repo, deferred to next iteration |
+| x402 payment | ✅ Real (Stellar tx of 0.1 XLM before each trade, tx hash stored in trade record) |
+| SQLite persistence | ✅ Real (better-sqlite3, includes LLM reasoning + iterations + token count) |
+| Three-persona demo UI | ✅ Real (vanilla HTML + Tailwind, live stats panel) |
+| Demo negative test #1 (1-bit tamper) | ✅ Real (bb verify rejects) |
+| Demo negative test #2 (rate-limit violation) | ✅ Real (circuit assertion rejects at nargo) |
+| Soroswap DEX swap | ⏳ Deferred — would require Soroswap testnet router contract |
 
 ### Architecture Choice: Path B (Off-chain Verify + On-chain Attest)
 
@@ -77,9 +79,9 @@ Two live negative tests in the demo UI:
 
 - Noir 1.0.0-beta.9 (circuit)
 - bb 0.87.0 (Barretenberg UltraHonk prover)
-- Soroban SDK 26.0.1 (Rust contracts)
-- OpenAI SDK → MiniMax M2.5 (LLM)
-- TypeScript (agent)
+- Soroban SDK 26.1.0 (Rust contracts, target wasm32v1-none)
+- OpenAI SDK → MiniMax /v1/chat/completions (LLM, Bearer auth, M2.5 model)
+- TypeScript + tsx (agent)
 - better-sqlite3 (storage)
 - poseidon-lite (off-chain hash matching Noir)
 
