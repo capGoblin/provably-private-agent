@@ -82,7 +82,15 @@ function runRealAgent() {
   const before = parseInt(invokeRead('get_trade_count').trim().split('\n').pop()) || 0;
   exec('cd /Users/dharshan/dev/stellar/agent && npx tsx src/index.ts --once');
   const after = parseInt(invokeRead('get_trade_count').trim().split('\n').pop()) || before;
-  return { trade_id: after - 1, total: after };
+  const newTrade = after > before;
+  return {
+    trade_id: newTrade ? after - 1 : null,
+    total: after,
+    new_trade: newTrade,
+    message: newTrade
+      ? 'New trade submitted on-chain'
+      : 'No new trade this cycle (rate-limited or strategy said HOLD)',
+  };
 }
 
 /** Re-verify a stored proof off-chain with bb. */
@@ -196,8 +204,19 @@ const server = http.createServer(async (req, res) => {
 
     if (req.url === '/api/run-agent' && req.method === 'POST') {
       const result = runRealAgent();
-      const onchain = readJSON(invokeRead('get_trade', `--trade_id ${result.trade_id}`));
-      const trade = enrichTrade(onchain);
+      let trade = null;
+      if (result.trade_id !== null) {
+        const onchain = readJSON(invokeRead('get_trade', `--trade_id ${result.trade_id}`));
+        trade = enrichTrade(onchain);
+      } else {
+        // Even if no new trade was created, return the most recent local one for context
+        const locals = getLocalTrades(1);
+        if (locals.length) {
+          const latestLocal = locals[0];
+          const onchain = readJSON(invokeRead('get_trade', `--trade_id ${latestLocal.trade_id}`));
+          trade = enrichTrade(onchain);
+        }
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ...result, trade }));
       return;
