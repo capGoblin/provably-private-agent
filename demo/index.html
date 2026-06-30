@@ -219,6 +219,11 @@ function renderTrades() {
         </button>
         <div id="verify-${t.trade_id}" class="text-sm flex-1 self-center"></div>
       </div>
+      ${t.llm_reasoning ? `
+      <details class="mt-3 bg-slate-900/30 rounded p-3 text-xs">
+        <summary class="cursor-pointer text-indigo-300 font-mono">🤖 LLM reasoning (${t.llm_iterations || '?'} iterations, ${t.llm_tokens || '?'} tokens)</summary>
+        <pre class="whitespace-pre-wrap text-gray-300 mt-2 text-xs">${t.llm_reasoning.slice(0, 800)}</pre>
+      </details>` : ''}
     </div>
   `).join('') || '<div class="text-gray-500 text-center py-8">No trades yet. Click "Run Agent" above.</div>';
 

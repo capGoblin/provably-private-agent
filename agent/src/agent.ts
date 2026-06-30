@@ -195,6 +195,14 @@ export class TradingAgent {
       const assistantMsg = response.choices[0].message;
       messages.push(assistantMsg);
 
+      // Capture the LLM's reasoning text at this step so it's available
+      // to the submit_trade tool (which persists it with the trade record).
+      if (assistantMsg.content) {
+        this.store.setState('last_llm_reasoning', assistantMsg.content);
+      }
+      this.store.setState('last_llm_iterations', String(iterations));
+      this.store.setState('last_llm_tokens', String(response.usage?.total_tokens ?? 0));
+
       const toolCalls = assistantMsg.tool_calls || [];
       for (const tc of toolCalls) {
         // OpenAI SDK v5: tool_calls is a union; we only register functions.
@@ -239,11 +247,19 @@ export class TradingAgent {
       iterations,
       tokens: response.usage?.total_tokens ?? 0,
     });
+    // Persist for demo display — use a deterministic key so the trade path
+    // can pick it up later.
+    this.store.setState('last_llm_reasoning', finalText);
+    this.store.setState('last_llm_iterations', String(iterations));
+    this.store.setState('last_llm_tokens', String(response.usage?.total_tokens ?? 0));
   }
 
   /** Deterministic fallback: runs strategy + submits if it signals action. */
   async runCycleDeterministic(): Promise<Promise<void>> {
     logger.info('[deterministic] starting');
+    this.store.setState('last_llm_reasoning', 'Deterministic mode (LLM unavailable): strategy signaled action, executing directly.');
+    this.store.setState('last_llm_iterations', '0');
+    this.store.setState('last_llm_tokens', '0');
     try {
       const marketData = await this.toolGetMarketData({ pair: 'USDC/EURC', lookback: 20 });
       logger.info('[deterministic] got market data', { points: marketData.points });
@@ -560,6 +576,9 @@ Rules:
       attestation_sig: attestationSig.toString('hex'),
       x402_payment_receipt: '0x' + x402Receipt.toString(16).padStart(64, '0'),
       reasoning: input.reasoning,
+      llm_reasoning: this.store.getState('last_llm_reasoning') || '',
+      llm_iterations: parseInt(this.store.getState('last_llm_iterations') || '0'),
+      llm_tokens: parseInt(this.store.getState('last_llm_tokens') || '0'),
       strategy_id: this.activeStrategy.id,
       strategy_signal: decision.signal,
       confidence: decision.confidence,

@@ -14,6 +14,7 @@ const USER_ID = 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT';
 const ROOT = '/Users/dharshan/dev/stellar';
 const RPC_URL = 'http://localhost:8130/soroban/rpc';
 const PASSPHRASE = 'Standalone Network ; February 2017';
+const AGENT_DB = '/Users/dharshan/dev/stellar/agent/.data/agent.db';
 
 const ENV = {
   ...process.env,
@@ -46,6 +47,34 @@ function readJSON(s) {
   const end = s.lastIndexOf('}');
   if (start === -1 || end === -1) return null;
   try { return JSON.parse(s.substring(start, end + 1)); } catch { return null; }
+}
+
+/** Fetch local SQLite trade records (where LLM reasoning + x402 tx hash live). */
+function getLocalTrades(limit = 10) {
+  try {
+    // Lazy require so missing better-sqlite3 doesn't kill the server
+    let Database;
+    try { Database = require('better-sqlite3'); } catch { return []; }
+    const db = new Database(AGENT_DB, { readonly: true, fileMustExist: false });
+    const rows = db.prepare('SELECT * FROM trades ORDER BY created_at DESC LIMIT ?').all(limit);
+    db.close();
+    return rows;
+  } catch { return []; }
+}
+
+/** Merge on-chain trade with local metadata (LLM reasoning, x402 tx hash). */
+function enrichTrade(onchainTrade) {
+  if (!onchainTrade) return null;
+  const locals = getLocalTrades(100);
+  const local = locals.find(l => String(l.trade_id) === String(onchainTrade.trade_id));
+  return {
+    ...onchainTrade,
+    llm_reasoning: local?.llm_reasoning || null,
+    x402_tx_hash: local?.x402_tx_hash || null,
+    x402_amount_stroops: local?.x402_amount_stroops || null,
+    reasoning: local?.reasoning || null,
+    strategy_id: local?.strategy_id || null,
+  };
 }
 
 /** Run the real agent end-to-end (one cycle). Returns the latest trade_id from the chain. */
@@ -167,7 +196,8 @@ const server = http.createServer(async (req, res) => {
 
     if (req.url === '/api/run-agent' && req.method === 'POST') {
       const result = runRealAgent();
-      const trade = readJSON(invokeRead('get_trade', `--trade_id ${result.trade_id}`));
+      const onchain = readJSON(invokeRead('get_trade', `--trade_id ${result.trade_id}`));
+      const trade = enrichTrade(onchain);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ...result, trade }));
       return;
@@ -177,7 +207,7 @@ const server = http.createServer(async (req, res) => {
       const count = parseInt(invokeRead('get_trade_count').trim().split('\n').pop()) || 0;
       const trades = [];
       for (let i = 0; i < count; i++) {
-        const t = readJSON(invokeRead('get_trade', `--trade_id ${i}`));
+        const t = enrichTrade(readJSON(invokeRead('get_trade', `--trade_id ${i}`)));
         if (t) trades.push(t);
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -187,7 +217,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.url.startsWith('/api/trade/') && req.method === 'GET') {
       const id = parseInt(req.url.split('/').pop());
-      const trade = readJSON(invokeRead('get_trade', `--trade_id ${id}`));
+      const trade = enrichTrade(readJSON(invokeRead('get_trade', `--trade_id ${id}`)));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(trade));
       return;
