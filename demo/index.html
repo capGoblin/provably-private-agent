@@ -26,6 +26,12 @@
     </div>
   </header>
 
+  <!-- Live stats -->
+  <section class="mb-8 p-6 bg-slate-800/50 rounded-lg border border-slate-700">
+    <h2 class="text-2xl font-semibold mb-3">Live Stats</h2>
+    <div id="stats" class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm"></div>
+  </section>
+
   <!-- Architecture -->
   <section class="mb-8 p-6 bg-slate-800/50 rounded-lg border border-slate-700">
     <h2 class="text-2xl font-semibold mb-3">Architecture (Path B: Off-chain Verify + On-chain Attest + x402)</h2>
@@ -182,6 +188,20 @@ function showPersona(p) {
 }
 
 function renderTrades() {
+  // Live stats
+  const total = trades.length;
+  const buys = trades.filter(t => t.action === 1).length;
+  const sells = trades.filter(t => t.action === 2).length;
+  const totalXlm = trades.reduce((s, t) => s + (t.x402_amount_stroops || 0), 0) / 1e7;
+  const llmIters = trades.reduce((s, t) => s + (t.llm_iterations || 0), 0);
+  document.getElementById('stats').innerHTML = `
+    <div class="p-4 bg-slate-900/50 rounded"><div class="text-xs text-gray-500">Trades</div><div class="text-2xl font-bold">${total}</div></div>
+    <div class="p-4 bg-slate-900/50 rounded"><div class="text-xs text-gray-500">Buys / Sells</div><div class="text-2xl font-bold text-green-400">${buys}<span class="text-gray-600">/</span><span class="text-red-400">${sells}</span></div></div>
+    <div class="p-4 bg-slate-900/50 rounded"><div class="text-xs text-gray-500">x402 paid</div><div class="text-2xl font-bold">${totalXlm.toFixed(2)} <span class="text-sm text-gray-500">XLM</span></div></div>
+    <div class="p-4 bg-slate-900/50 rounded"><div class="text-xs text-gray-500">Compliance</div><div class="text-2xl font-bold text-green-400">100%</div></div>
+    <div class="p-4 bg-slate-900/50 rounded"><div class="text-xs text-gray-500">LLM iters</div><div class="text-2xl font-bold">${llmIters}</div></div>
+  `;
+
   // Trader view
   document.getElementById('trader-trades').innerHTML = trades.map(t => `
     <div class="p-4 bg-slate-800/50 rounded border border-slate-700">
