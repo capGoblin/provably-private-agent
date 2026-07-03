@@ -240,7 +240,7 @@ Our investigation revealed that the existing Soroban UltraHonk verifier (`yugoca
 
 The test env's "success" is misleading — it uses a host function path that doesn't validate "on curve". Production Soroban is strict. See "Lessons Learned" below for details.
 
-Our Path B architecture is **architecturally defensible, matches production ZK systems, and removes dependency on Soroban BN254 host function stability across protocol versions**.
+Our off-chain-verify architecture is **architecturally defensible, matches production ZK systems, and removes dependency on Soroban BN254 host function stability across protocol versions**.
 
 ---
 
@@ -296,9 +296,9 @@ provably-private-agent/
 ├── contracts/
 │   ├── policy/                         # policy storage contract
 │   │   └── src/lib.rs                  # ~50 LOC
-│   ├── executor/                       # main executor (Path B: ed25519 attest)
+│   ├── executor/                       # main executor (off-chain verify + ed25519 attest)
 │   │   └── src/lib.rs                  # ~170 LOC, builds keccak message over proof+inputs
-│   └── verifier/                       # forked rs-soroban-ultrahonk (experimental, not used in Path B)
+│   └── verifier/                       # forked rs-soroban-ultrahonk (experimental, not used - see Architecture Choice)
 │       └── ...
 │
 ├── agent/                              # OFF-CHAIN AGENT — real TypeScript implementation
@@ -362,7 +362,7 @@ provably-private-agent/
 - "Regulators want compliance but can't audit private strategies"
 
 **0:30–1:00** The Architecture
-- Show architecture diagram (Path B)
+- Show architecture diagram (off-chain verify + on-chain attest)
 - Explain: agent generates proof off-chain → verifies locally → signs attestation → submits to Soroban
 - "Soroban stores trade + proof hash + signed attestation. No strategy internals leak."
 

@@ -1,8 +1,8 @@
 #![no_std]
-// Provably Private Agent - Executor Contract (Path B: attestation model)
+// Provably Private Agent - Executor Contract (attestation model)
 //
 // Stores trades with their ZK proofs and signed attestations.
-// Does NOT verify proofs on-chain (Path B: off-chain verify, on-chain attest).
+// Does NOT verify proofs on-chain (off-chain verify, on-chain attest).
 // Anyone can re-verify client-side using VK + proof + public_inputs from this contract.
 //
 // Architecture:
