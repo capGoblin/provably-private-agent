@@ -1,13 +1,7 @@
-// Provably Private Agent - perp_policy circuit
-//
-// Second instantiation of the same PolicyProof pattern used by
-// strategy_policy (spot DEX). Proves a leveraged perp order came from the
-// committed private strategy AND respects the venue's public risk policy.
-//
-// PolicyProof pattern (shared across verticals):
-//   PRIVATE witnesses  = strategy params + secret salt
-//   PUBLIC inputs      = market state + agent state + policy_hash + policy fields
-//   OUTPUTS            = (action, size, new_state_hash, policy_hash)
+// perp_policy - perps instantiation of the PolicyProof pattern.
+// Shared invariants live in the policy_core library; only the
+// vertical-specific rules (leverage cap, notional cap, margin floor) are
+// defined here.
 //
 // PRIVATE (witnesses): entry_threshold, exit_threshold, target_leverage,
 //                     position_notional_prev, secret
@@ -17,11 +11,7 @@
 //                     min_margin_ratio_bps, max_position_notional,
 //                     min_time_between_trades)
 
-use dep::poseidon::poseidon::bn254;
-
-global HOLD: Field = 0;
-global LONG: Field = 1;
-global SHORT: Field = 2;
+use dep::policy_core;
 
 fn main(
     // ---- PRIVATE WITNESSES (the strategy's alpha) ----
@@ -45,17 +35,14 @@ fn main(
     max_position_notional: pub Field,
     min_time_between_trades: pub Field,
 ) -> pub (Field, Field, Field, Field) {
-    // 1. Verify policy hash binds to declared policy fields
-    let computed_policy_hash = bn254::hash_4([
-        max_leverage,
-        min_margin_ratio_bps,
-        max_position_notional,
-        min_time_between_trades,
-    ]);
-    assert(computed_policy_hash == policy_hash, "policy mismatch");
+    // Shared invariant 1: policy binding
+    policy_core::bind_policy(
+        [max_leverage, min_margin_ratio_bps, max_position_notional, min_time_between_trades],
+        policy_hash,
+    );
 
-    // 2. Strategy commitment: bind proof to specific strategy params + secret
-    let strategy_commitment = bn254::hash_5([
+    // Shared invariant 2: strategy commitment
+    let strategy_commitment = policy_core::commit_strategy_5([
         entry_threshold,
         exit_threshold,
         target_leverage,
@@ -63,65 +50,48 @@ fn main(
         secret,
     ]);
 
-    // 3. Rate limit check
-    let time_since_last: u64 = (market_timestamp - last_trade_ts) as u64;
-    let min_time_u: u64 = min_time_between_trades as u64;
-    assert(time_since_last >= min_time_u, "rate limit violated");
+    // Shared rule: rate limit
+    policy_core::assert_rate_limit(market_timestamp, last_trade_ts, min_time_between_trades);
 
-    // 4. Leverage cap: strategy's private target leverage must not exceed
-    //    the public policy cap. The cap is enforced without revealing the
-    //    actual target leverage.
-    let lev_u: u64 = target_leverage as u64;
-    let max_lev_u: u64 = max_leverage as u64;
-    assert(lev_u <= max_lev_u, "leverage exceeds policy cap");
-    assert(lev_u >= 1, "leverage must be >= 1");
+    // Vertical rule: private leverage must not exceed public cap - enforced
+    // without revealing the actual leverage (2x and 4.9x both pass a 5x cap).
+    policy_core::assert_private_leq_cap(target_leverage, max_leverage, "leverage exceeds policy cap");
+    assert(target_leverage as u64 >= 1, "leverage must be >= 1");
 
-    // 5. Decision logic: private thresholds vs public mark price
-    //    (same simplified trigger scheme as strategy_policy)
-    let scale: u64 = 100;
-    let entry_u: u64 = entry_threshold as u64;
-    let exit_u: u64 = exit_threshold as u64;
-    let price_u: u64 = mark_price as u64;
-    let long_trigger: u64 = entry_u * scale;
-    let short_trigger: u64 = exit_u * scale;
+    // Shared invariant 3: derived decision (LONG below / SHORT above triggers)
+    let action = policy_core::threshold_action(mark_price, entry_threshold, exit_threshold);
 
-    let action: Field = if price_u < long_trigger {
-        LONG
-    } else if price_u > short_trigger {
-        SHORT
-    } else {
-        HOLD
-    };
+    // Vertical rule: position sizing + notional cap
+    let notional: u64 = collateral as u64 * target_leverage as u64;
+    assert(
+        notional <= max_position_notional as u64,
+        "position notional exceeds cap",
+    );
 
-    // 6. Position sizing: notional = collateral * target_leverage
-    let notional: u64 = collateral as u64 * lev_u;
-
-    // 7. Position notional cap (public policy)
-    let max_notional_u: u64 = max_position_notional as u64;
-    assert(notional <= max_notional_u, "position notional exceeds policy cap");
-
-    // 8. Margin ratio floor: collateral / notional >= min_margin_ratio_bps.
-    //    collateral * 10000 >= notional * min_margin_ratio_bps
+    // Vertical rule: margin ratio floor
+    // collateral / notional >= min_margin_ratio_bps / 10000
     let margin_lhs: u64 = collateral as u64 * 10000;
     let margin_rhs: u64 = notional * (min_margin_ratio_bps as u64);
     assert(margin_lhs >= margin_rhs, "margin ratio below policy floor");
 
-    // 9. New state commitment
-    let new_notional: Field = if action == HOLD {
+    // Chained state commitment
+    let new_notional: Field = if action == policy_core::HOLD {
         position_notional_prev
     } else {
         notional as Field
     };
-    let new_state_hash = bn254::hash_5([
+    let new_state_hash = policy_core::state_hash(
         strategy_commitment,
         new_notional,
         mark_price,
         market_timestamp,
         funding_rate_bps,
-    ]);
+    );
 
     (action, notional as Field, new_state_hash, policy_hash)
 }
+
+use dep::poseidon::poseidon::bn254;
 
 // Policy for tests: max_leverage=5, min_margin_ratio_bps=1500 (15%),
 // max_position_notional=100_000_000_000, min_time_between_trades=60
@@ -139,7 +109,7 @@ fn test_long_decision() {
         test_policy_hash(),
         5, 1500, 100000000000, 60,
     );
-    assert(result.0 == LONG);
+    assert(result.0 == policy_core::ENTER);
     assert(result.1 == 30000000000); // 3x collateral
 }
 
@@ -153,7 +123,7 @@ fn test_hold_decision() {
         test_policy_hash(),
         5, 1500, 100000000000, 60,
     );
-    assert(result.0 == HOLD);
+    assert(result.0 == policy_core::HOLD);
 }
 
 #[test]
@@ -166,7 +136,7 @@ fn test_short_decision() {
         test_policy_hash(),
         5, 1500, 100000000000, 60,
     );
-    assert(result.0 == SHORT);
+    assert(result.0 == policy_core::EXIT);
 }
 
 #[test(should_fail_with = "leverage exceeds policy cap")]
@@ -181,7 +151,7 @@ fn test_leverage_cap() {
     );
 }
 
-#[test(should_fail_with = "position notional exceeds policy cap")]
+#[test(should_fail_with = "position notional exceeds cap")]
 fn test_notional_cap() {
     // 5x on 30B collateral = 150B notional > 100B cap
     let _ = main(
@@ -195,8 +165,7 @@ fn test_notional_cap() {
 
 #[test(should_fail_with = "margin ratio below policy floor")]
 fn test_margin_floor() {
-    // 5x leverage -> margin ratio 20%... need one that passes notional but
-    // fails margin. Policy floor 2500bps (25%): 5x -> 20% margin -> reject.
+    // Policy floor 2500bps (25%): 5x leverage -> 20% margin -> reject
     let policy_hash = bn254::hash_4([5, 2500, 100000000000, 60]);
     let _ = main(
         30, 70, 5, 0, 42,

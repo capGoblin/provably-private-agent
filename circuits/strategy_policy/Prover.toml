@@ -1,9 +1,9 @@
 # Public inputs
-market_price = "9645089"
-market_timestamp = "1782765408"
+market_price = "8277341"
+market_timestamp = "1783079147"
 pair_hash = "1"
 balance = "10000000000"
-last_trade_ts = "1782765407"
+last_trade_ts = "0"
 consecutive_losses = "0"
 policy_hash = "18738529727061288748023552268662008167102803450906575333704861203674502123430"
 max_trade_size_pct = "5"

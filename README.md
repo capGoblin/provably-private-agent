@@ -159,10 +159,30 @@ The agent handles all proof generation, attestation, and on-chain submission. No
 
 ---
 
-## The PolicyProof Pattern (this is a framework, not one circuit)
+## The PolicyProof Framework
 
-Every circuit in `circuits/` follows the same contract, which makes the whole
-system generic across trading verticals:
+The shared logic lives once, in a real Noir library — `circuits/policy_core`
+(`type = "lib"`). Vertical circuits are thin instantiations that import it:
+
+```
+circuits/
+├── policy_core/        # THE LIBRARY: bind_policy, commit_strategy,
+│                       # assert_rate_limit, assert_private_leq_cap,
+│                       # threshold_action, state_hash
+├── strategy_policy/    # spot DEX  = policy_core + pair whitelist
+│                       #           + loss circuit-breaker + size cap
+└── perp_policy/        # perps     = policy_core + leverage cap
+                        #           + margin floor + notional cap
+```
+
+Why per-vertical circuits at all? A ZK circuit is a *fixed program* with one
+verification key — there is no such thing as one circuit that dynamically
+handles arbitrary policy sets (that's not how arithmetization works). The
+correct library shape is exactly this: shared invariants in `policy_core`,
+one thin `main.nr` per vertical declaring its private witnesses and policy
+fields. Each circuit's VK is registered with the executor contract.
+
+Every vertical satisfies the same contract:
 
 ```
 PRIVATE witnesses  =  strategy params + secret salt     (the alpha — never leaves your machine)

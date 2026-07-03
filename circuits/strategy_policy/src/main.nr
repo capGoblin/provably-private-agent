@@ -1,7 +1,7 @@
-// Provably Private Agent - strategy_policy circuit
-//
-// Proves that a trade decision came from the committed private strategy
-// AND respects the on-chain public policy.
+// strategy_policy - spot DEX instantiation of the PolicyProof pattern.
+// Shared invariants live in the policy_core library; only the
+// vertical-specific rules (pair whitelist, loss circuit-breaker, trade
+// sizing) are defined here.
 //
 // PRIVATE (witnesses): buy_threshold, sell_threshold, period, last_signal,
 //                     position, secret
@@ -9,14 +9,10 @@
 //                     balance, last_trade_ts, consecutive_losses,
 //                     policy_hash, policy fields
 
-use dep::poseidon::poseidon::bn254;
-
-global HOLD: Field = 0;
-global BUY: Field = 1;
-global SELL: Field = 2;
+use dep::policy_core;
 
 fn main(
-    // ---- PRIVATE WITNESSES ----
+    // ---- PRIVATE WITNESSES (the strategy's alpha) ----
     buy_threshold: Field,
     sell_threshold: Field,
     period: Field,
@@ -24,7 +20,7 @@ fn main(
     position: Field,
     secret: Field,
 
-    // ---- PUBLIC INPUTS ----
+    // ---- PUBLIC INPUTS (market + agent state) ----
     market_price: pub Field,
     market_timestamp: pub Field,
     pair_hash: pub Field,
@@ -39,17 +35,14 @@ fn main(
     min_time_between_trades: pub Field,
     max_consecutive_losses: pub Field,
 ) -> pub (Field, Field, Field, Field) {
-    // 1. Verify policy hash binds to declared policy fields
-    let computed_policy_hash = bn254::hash_4([
-        max_trade_size_pct,
-        allowed_pair_hash,
-        min_time_between_trades,
-        max_consecutive_losses,
-    ]);
-    assert(computed_policy_hash == policy_hash, "policy mismatch");
+    // Shared invariant 1: policy binding
+    policy_core::bind_policy(
+        [max_trade_size_pct, allowed_pair_hash, min_time_between_trades, max_consecutive_losses],
+        policy_hash,
+    );
 
-    // 2. Strategy commitment: bind proof to specific strategy params + secret
-    let strategy_commitment = bn254::hash_6([
+    // Shared invariant 2: strategy commitment
+    let strategy_commitment = policy_core::commit_strategy_6([
         buy_threshold,
         sell_threshold,
         period,
@@ -58,65 +51,49 @@ fn main(
         secret,
     ]);
 
-    // 3. Pair check (cast to u64 for comparison)
-    let pair_u: u64 = pair_hash as u64;
-    let allowed_pair_u: u64 = allowed_pair_hash as u64;
-    assert(pair_u == allowed_pair_u, "pair not allowed");
+    // Vertical rule: pair whitelist
+    assert(pair_hash as u64 == allowed_pair_hash as u64, "pair not allowed");
 
-    // 4. Rate limit check
-    let time_since_last: u64 = (market_timestamp - last_trade_ts) as u64;
-    let min_time_u: u64 = min_time_between_trades as u64;
-    assert(time_since_last >= min_time_u, "rate limit violated");
+    // Shared rule: rate limit
+    policy_core::assert_rate_limit(market_timestamp, last_trade_ts, min_time_between_trades);
 
-    // 5. Circuit breaker (consecutive losses)
-    let consec_u: u64 = consecutive_losses as u64;
-    let max_losses_u: u64 = max_consecutive_losses as u64;
-    assert(consec_u < max_losses_u, "circuit breaker active");
+    // Vertical rule: loss circuit-breaker
+    assert(
+        (consecutive_losses as u64) < (max_consecutive_losses as u64),
+        "circuit breaker active",
+    );
 
-    // 6. Decision logic: simplified mean-reversion
-    //    price vs threshold * 100 (works for small price ranges)
-    let scale: u64 = 100;
-    let buy_u: u64 = buy_threshold as u64;
-    let sell_u: u64 = sell_threshold as u64;
-    let price_u: u64 = market_price as u64;
-    let buy_trigger: u64 = buy_u * scale;
-    let sell_trigger: u64 = sell_u * scale;
+    // Shared invariant 3: derived decision (BUY below / SELL above triggers)
+    let action = policy_core::threshold_action(market_price, buy_threshold, sell_threshold);
 
-    let action: Field = if price_u < buy_trigger {
-        BUY
-    } else if price_u > sell_trigger {
-        SELL
-    } else {
-        HOLD
-    };
-
-    // 7. Trade amount: max_trade_size_pct % of balance
+    // Vertical rule: trade amount derived from policy (cannot exceed cap)
     let amount: u64 = (balance as u64 * max_trade_size_pct as u64) / 100;
 
-    // 8. New state commitment
-    let new_position: Field = if action == BUY {
+    // Chained state commitment
+    let new_position: Field = if action == policy_core::ENTER {
         amount as Field
-    } else if action == SELL {
+    } else if action == policy_core::EXIT {
         0
     } else {
         position
     };
-    let new_state_hash = bn254::hash_5([
+    let new_state_hash = policy_core::state_hash(
         strategy_commitment,
         new_position,
         market_price,
         market_timestamp,
         consecutive_losses,
-    ]);
+    );
 
     (action, amount as Field, new_state_hash, policy_hash)
 }
+
+use dep::poseidon::poseidon::bn254;
 
 #[test]
 fn test_hold_decision() {
     // price = 5000, buy_trigger = 3000, sell_trigger = 7000 -> HOLD
     let policy_hash = bn254::hash_4([5, 1, 600, 3]);
-    std::println(f"policy_hash = {policy_hash}");
     let result = main(
         30, 70, 14, 50, 0, 42,
         5000, 1700000000, 1,
@@ -124,7 +101,7 @@ fn test_hold_decision() {
         policy_hash,
         5, 1, 600, 3,
     );
-    assert(result.0 == HOLD);
+    assert(result.0 == policy_core::HOLD);
 }
 
 #[test]
@@ -138,7 +115,7 @@ fn test_buy_decision() {
         policy_hash,
         5, 1, 600, 3,
     );
-    assert(result.0 == BUY);
+    assert(result.0 == policy_core::ENTER);
 }
 
 #[test]
@@ -152,7 +129,7 @@ fn test_sell_decision() {
         policy_hash,
         5, 1, 600, 3,
     );
-    assert(result.0 == SELL);
+    assert(result.0 == policy_core::EXIT);
 }
 
 #[test(should_fail_with = "pair not allowed")]
