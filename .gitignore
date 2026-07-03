@@ -64,6 +64,15 @@ __pycache__/
 .env
 .envrc
 
+# Local planning / submission scaffolding - never push these
+DEMO_SCRIPT.md
+DORAHACKS_SUBMISSION.md
+SUBMISSION.md
+build-plan.md
+handoff.md
+plan-v2.md
+resources.md
+
 # External clone (downloaded separately by user)
 contracts/verifier/
 
