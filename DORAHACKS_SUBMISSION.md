@@ -14,13 +14,11 @@ Provably Private Agent
 
 ## Logo
 
-`showcase/assets/logo.png` (512×512, also `logo.svg` if the form accepts vector).
+`showcase/assets/logo.png` (512×512 PNG; `logo.svg` also available if the form accepts vector).
 
-Design: an indigo shield (the public policy boundary) with a closed eye at its
-core (the private strategy, hidden) and a checkmark (the ZK proof that
-compliance was verified) — faint circuit-node lines in the background nod to
-the proof graph. Local path:
-`/Users/dharshan/dev/stellar/showcase/assets/logo.png`
+An indigo shield — the public policy boundary — with a closed eye at its core (the private strategy, hidden) and a checkmark cutting through it (the proof that compliance holds). Faint circuit-node lines in the background nod to the proof graph.
+
+Local path: `/Users/dharshan/dev/stellar/showcase/assets/logo.png`
 
 ---
 
@@ -30,7 +28,7 @@ the proof graph. Local path:
 An AI trading agent whose private strategy stays secret, but whose compliance with public policy is provably enforced via ZK proofs — verified on Stellar's Soroban.
 ```
 
-(166 characters — fits with room to spare.)
+166 characters.
 
 ---
 
@@ -47,147 +45,135 @@ https://github.com/capGoblin/stellar-private-agent
 ```markdown
 # Provably Private Agent
 
-**Private strategy. Public compliance. On Stellar.**
-
-An AI trading agent whose strategy stays cryptographically private, but
-whose compliance with public policy is *provably enforced* — via Zero-
-Knowledge proofs, an on-chain ed25519 attestation, and a real x402 payment,
-all verified against a deployed Soroban contract.
-
-> Stellar Hacks: Real-World ZK — Track: Real-World ZK
+**Private strategy. Public compliance. Both provable.**
+Stellar Hacks: Real-World ZK
 
 ---
 
-## 🚀 TL;DR
+## The problem in one sentence
 
-Hedge funds have alpha worth protecting. Regulators need compliance
-visibility. These two needs conflict — until now.
+A trading strategy's edge is the thing worth hiding; a regulator's job is
+confirming the trade obeyed the rules. On a public ledger, proving the
+second usually means leaking the first. This project makes both true at
+once, with a ZK proof instead of a promise.
 
-The agent runs a private trading strategy, and when it decides to trade, it
-generates an UltraHonk ZK proof (Noir circuit) proving: *"this decision came
-from the committed strategy AND respects the public policy (rate limits,
-pair whitelist, size caps, circuit breakers)."* The strategy's actual
-thresholds never leave the private witness. Anyone — trader, regulator, or
-the public — can re-verify the math independently.
+## What it does
 
-**This is a framework, not a single app.** The `policy_core` Noir library
-implements three shared invariants (policy binding, strategy commitment,
-derived decision) that any trading vertical composes. Two verticals ship
-today:
+An LLM agent runs a private strategy, and every time it decides to trade,
+it generates a Noir/UltraHonk proof showing: *this decision came from one
+specific committed strategy, and that strategy respected a public policy
+(rate limits, size caps, leverage caps, circuit breakers)*. The strategy's
+actual thresholds never leave the private witness. The proof plus an
+ed25519 attestation goes to a Soroban executor contract; a real 0.1 XLM
+x402 payment gates the cycle. Anyone can pull the proof back off-chain and
+re-verify the math themselves — no need to trust the executor.
 
-| Circuit | Vertical | Hidden (private) | Enforced (public policy) |
+## Numbers that are checkable, not claimed
+
+| | |
+|---|---|
+| Proof scheme | UltraHonk (Barretenberg `bb` 0.87.0) |
+| Proof size | 14,564 bytes, 11 public inputs |
+| Proof generation time | ~250ms |
+| Circuit tests passing | 5/5 (spot) + 8/8 (perps) |
+| On-chain executor | `CDDBMMWA6WYT6ZT5QRBATVEXC3IMVJQ4ZR6TREVL43WWSJ3HOKRMP4OZ` |
+| x402 payment | 0.1 XLM, real signed Stellar tx per cycle |
+| Repo | 22 commits, fully documented |
+| Negative tests (live in the demo) | 2 |
+
+## This is a framework, not one app
+
+The shared logic lives once, in a Noir library (`policy_core`): policy
+binding (you can't prove against a looser policy than the one committed
+on-chain), strategy commitment (the proof is bound to one hidden
+strategy), and derived decision (the action is computed inside the
+circuit, never claimed by the prover). Two verticals compose it today:
+
+| Circuit | Vertical | Hidden | Enforced |
 |---|---|---|---|
-| `strategy_policy` | Spot DEX (live end-to-end) | buy/sell thresholds, period, secret | max trade size, pair whitelist, rate limit, loss breaker |
+| `strategy_policy` | Spot DEX — live end-to-end | buy/sell thresholds, period, secret | max trade size, pair whitelist, rate limit, loss breaker |
 | `perp_policy` | Perps | entry/exit thresholds, **leverage**, secret | **max leverage**, **margin floor**, notional cap, rate limit |
 
 `perp_policy` proves *"my leverage ≤ the venue's 5x cap"* without revealing
-whether it's 2x or 4.9x — full `nargo test` (8/8 passing) → `bb prove` →
-`bb verify` pipeline confirmed.
+whether it's 2x or 4.9x. Adding a third vertical (RWA mandate compliance,
+market-maker exposure limits) is one Noir file plus one TypeScript
+strategy class — same executor, same attestation flow.
 
----
+## Why Stellar, why now
 
-## 🎯 Why Stellar, why now
+Stellar's actual trading volume today is stablecoin FX (XLM/USDC,
+USDC/EURC), made almost entirely by market-making bots — the long-running
+Kelp/Aquarius culture. At the same time, institutional capital is arriving
+fast: Stellar's RWA market cap (ex-stablecoins) went from $796M to $1.52B
+in one quarter (+91% QoQ) via Franklin Templeton's BENJI, Ondo, WisdomTree.
+And leveraged perps are launching on Stellar for the first time in 2026
+(Rails, Stellars Finance) — so no incumbent privacy/compliance tooling
+exists yet for that vertical either. Three real audiences, one proof
+pattern: market makers proving exposure limits without revealing spread
+models, RWA operators proving mandate compliance without disclosing
+strategy, perp traders proving leverage caps without revealing position
+size.
 
-Stellar's real trading activity is stablecoin FX (XLM/USDC, USDC/EURC) made
-almost entirely by market-making bots — the historical Kelp/Aquarius
-culture. Meanwhile institutional capital is arriving fast: Stellar's RWA
-market cap (ex-stablecoins) grew from $796M to $1.52B in a single quarter
-(+91% QoQ) — Franklin Templeton's BENJI, Ondo, WisdomTree. And leveraged
-perps are launching on Stellar for the first time in 2026 (Rails, Stellars
-Finance) — meaning no incumbent privacy/compliance tooling exists yet for
-that vertical either.
-
-Three real audiences, one proof pattern:
-- **Market makers today** — prove exposure/risk limits without revealing
-  the spread model.
-- **RWA fund operators next** — prove mandate compliance (position limits,
-  allowed assets) without disclosing the strategy to competitors.
-- **Perp traders soon** — prove leverage stays under a venue's cap without
-  revealing the actual leverage used.
-
----
-
-## 🔍 What's REAL (not mocked)
+## What's real vs. not yet wired
 
 | Component | Status |
 |---|---|
-| TypeScript agent, real LLM tool-use loop | ✅ OpenAI SDK → MiniMax M2.5 (`/v1/chat/completions`) |
-| Z-score mean-reversion strategy | ✅ 20-period rolling z-score, ±2σ thresholds |
-| ZK proof generation | ✅ `nargo execute` + `bb prove`, UltraHonk, ~14.5KB proof |
-| Off-chain Poseidon BN254 hashing | ✅ Matches Noir's classic Poseidon via `poseidon-lite` |
-| ed25519 attestation signing | ✅ keccak256 over proof + public inputs |
-| On-chain trade submission | ✅ Deployed executor `CDDBMMWA6WYT6ZT5QRBATVEXC3IMVJQ4ZR6TREVL43WWSJ3HOKRMP4OZ` |
-| x402 payment | ✅ Real 0.1 XLM Stellar tx before each trade, hash stored in the audit trail |
-| SQLite persistence | ✅ Trades + full LLM reasoning + iteration/token counts |
-| Three-persona demo UI | ✅ Trader / Regulator / Public views, live stats panel |
-| Negative test #1 — 1-bit proof tamper | ✅ `bb verify` rejects the mutated proof |
-| Negative test #2 — policy violation | ✅ `nargo execute` rejects at proof-generation time |
-| `policy_core` Noir library + 2 circuit verticals | ✅ Spot DEX + Perps, both fully proven |
-| Soroswap/Aquarius live DEX execution | ⏳ In progress (testnet Aquarius swap integration) |
+| LLM tool-use loop (OpenAI SDK → MiniMax M2.5) | real |
+| Z-score mean-reversion strategy (20-period, ±2σ) | real |
+| ZK proof generation (`nargo execute` + `bb prove`) | real |
+| Off-chain Poseidon BN254 hashing (`poseidon-lite`, matches the circuit) | real |
+| ed25519 attestation (keccak256 over proof + public inputs) | real |
+| On-chain trade submission to the deployed executor | real |
+| x402 payment (0.1 XLM Stellar tx, hash in the audit trail) | real |
+| SQLite persistence (trades, LLM reasoning, token counts) | real |
+| Three-persona demo UI (trader / regulator / public) | real |
+| Negative test — 1-bit proof tamper → `bb verify` rejects | real |
+| Negative test — policy violation → `nargo execute` rejects | real |
+| `policy_core` library + 2 circuit verticals, both fully proven | real |
+| Aquarius/Soroswap live swap execution | in progress |
 
----
+## Architecture: off-chain verify, on-chain attest
 
-## 🏗️ Architecture — Path B (Off-chain Verify, On-chain Attest)
+We first tried verifying the ZK proof inside a Soroban contract directly —
+Soroban's BN254 host functions were fragile across SDK versions. So the
+architecture splits the job instead: the agent generates the proof and
+verifies it locally with `bb verify`, signs an ed25519 attestation over it,
+and the Soroban executor only has to check that signature — a native,
+solid Soroban host function — before storing the trade, proof, and
+attestation on-chain. Anyone can then pull the proof back and re-run
+`bb verify` themselves. The math is the source of truth, not trust in the
+contract.
 
-We first tried verifying the ZK proof directly inside a Soroban contract
-(Path A) — Soroban's BN254 host functions proved fragile across SDK
-versions. **Path B** splits responsibilities instead:
+## Demo flow
 
-1. **Agent (off-chain)** — generates the proof, verifies it locally with
-   `bb verify`, signs an ed25519 attestation over it.
-2. **Executor (on-chain, Soroban)** — verifies only the ed25519 signature
-   (a native, rock-solid Soroban host function), stores the trade + proof +
-   attestation, emits an audit event.
-3. **Anyone** — pulls the proof + VK from the contract and re-runs
-   `bb verify` independently. The math is the source of truth, not trust in
-   the executor.
-
----
-
-## 🎬 Demo flow
-
-1. LLM cycle: fetches market data → runs the strategy → decides to trade
-   (~3–6 tool-use iterations, ~1.5–3k tokens)
-2. ZK proof generated in ~250ms (UltraHonk, 14.5KB)
-3. Real x402 payment (0.1 XLM) sent, tx hash captured
+1. LLM cycle fetches market data, runs the strategy, decides to trade
+   (3–6 tool-use iterations, ~1.5–3k tokens)
+2. ZK proof generated (~250ms, 14.5KB)
+3. Real x402 payment sent, tx hash captured
 4. ed25519 attestation signed
-5. Trade submitted on-chain → `trade_id` returned from the contract event
-6. **Negative test #1**: flip one bit in the stored proof → `bb verify`
-   rejects it — "math doesn't lie" even though the contract already
-   accepted the original trade.
-7. **Negative test #2**: attempt a policy-violating trade (e.g. rate limit
-   broken) → `nargo execute` refuses to even generate a witness — you
-   cannot fake compliance, the circuit enforces it at proof time.
+5. Trade submitted on-chain, `trade_id` returned from the contract event
+6. Negative test #1: flip one bit in the stored proof → `bb verify`
+   rejects it, even though the contract already accepted the original
+   trade — anyone can catch the tamper independently
+7. Negative test #2: attempt a policy-violating trade → `nargo execute`
+   refuses to generate a witness at all — you cannot fake compliance
 
-Run it yourself: `npx tsx src/index.ts --once` (agent) or `bin/demo.sh`
-(full demo UI + local Soroban network).
+## Try it
 
----
+```
+git clone https://github.com/capGoblin/stellar-private-agent
+cd stellar-private-agent/agent && npx tsx src/index.ts --once   # run the real agent
+cd .. && bin/demo.sh                                             # full demo UI + local Soroban network
+```
 
-## 🧰 Tech Stack
+Static showcase (no setup, frozen replay of a real captured run — every
+hash and signature is genuine): https://provably-private-agent.vercel.app
 
-- Noir 1.0.0-beta.9 (circuit language, `policy_core` lib + 2 circuits)
-- bb 0.87.0 (Barretenberg, UltraHonk prover, keccak oracle)
-- Soroban SDK 26.1.0 (Rust, `wasm32v1-none` target)
-- OpenAI SDK → MiniMax `/v1/chat/completions` (LLM orchestrator, M2.5)
-- TypeScript + tsx (agent runtime)
-- better-sqlite3 (local persistence)
-- poseidon-lite (off-chain Poseidon matching the Noir circuit exactly)
+## Tech stack
 
----
-
-## 📦 Repo
-
-**https://github.com/capGoblin/stellar-private-agent**
-
-20+ commits, fully documented README (architecture diagram, PolicyProof
-pattern writeup, quickstart), end-to-end runnable locally.
-
-## 🔗 Live static showcase
-
-**https://showcase-lyart-one.vercel.app** — frozen replay of a real captured
-run (genuine proof hashes, ed25519 sigs, x402 tx hashes — nothing
-fabricated) for judges who don't want to spin up the local Soroban network.
+Noir 1.0.0-beta.9 · bb 0.87.0 (UltraHonk, keccak oracle) · Soroban SDK
+26.1.0 (`wasm32v1-none`) · OpenAI SDK → MiniMax `/v1/chat/completions` ·
+TypeScript + tsx · better-sqlite3 · poseidon-lite
 ```
 
 ---
