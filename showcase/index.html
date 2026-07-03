@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Provably Private Agent — Static Showcase</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .gradient-bg { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
+    .glow { box-shadow: 0 0 20px rgba(99, 102, 241, 0.4); }
+  </style>
+</head>
+<body class="gradient-bg text-white min-h-screen p-6">
+
+<div class="max-w-6xl mx-auto">
+
+  <!-- Header -->
+  <header class="text-center mb-8 pt-8">
+    <h1 class="text-5xl font-bold mb-3">
+      <span class="text-indigo-400">Provably</span> Private Agent
+    </h1>
+    <p class="text-gray-400 text-lg">Private strategy. Public compliance. On Stellar.</p>
+    <div class="mt-4 inline-block px-4 py-2 bg-indigo-900/50 border border-indigo-700 rounded-full text-sm">
+      Stellar Hacks: Real-World ZK · Demo
+    </div>
+  </header>
+
+  <!-- Static showcase notice -->
+  <div class="mb-8 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg text-sm text-amber-200">
+    📸 <strong>Static showcase.</strong> The trades, proofs, and negative-test results below are frozen captures from a real local run (real UltraHonk proofs, real ed25519 attestations, real on-chain executor calls, real x402 payments). This page does not execute anything live — clone the repo and run <code class="bg-black/30 px-1 rounded">bin/demo.sh</code> for the live version with your own local Soroban network.
+    <a href="https://github.com/capGoblin/stellar-private-agent" class="underline text-amber-100">github.com/capGoblin/stellar-private-agent</a>
+  </div>
+
+  <!-- Live stats -->
+  <section class="mb-8 p-6 bg-slate-800/50 rounded-lg border border-slate-700">
+    <h2 class="text-2xl font-semibold mb-3">Live Stats</h2>
+    <div id="stats" class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm"></div>
+  </section>
+
+  <!-- Architecture -->
+  <section class="mb-8 p-6 bg-slate-800/50 rounded-lg border border-slate-700">
+    <h2 class="text-2xl font-semibold mb-3">Architecture (Path B: Off-chain Verify + On-chain Attest + x402)</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+      <div class="p-4 bg-slate-900/50 rounded">
+        <div class="text-indigo-400 font-mono mb-2">[1] Agent (off-chain)</div>
+        <ul class="text-gray-300 space-y-1 text-xs">
+          <li>• Receives x402 payment (0.1 XLM)</li>
+          <li>• Generates UltraHonk ZK proof</li>
+          <li>• Verifies proof locally via bb</li>
+          <li>• Signs attestation (ed25519)</li>
+          <li>• Submits to executor</li>
+        </ul>
+      </div>
+      <div class="p-4 bg-slate-900/50 rounded">
+        <div class="text-indigo-400 font-mono mb-2">[2] Executor (on-chain)</div>
+        <ul class="text-gray-300 space-y-1 text-xs">
+          <li>• Verifies attestation sig (ed25519)</li>
+          <li>• Stores x402 payment receipt</li>
+          <li>• Stores trade + proof + VK</li>
+          <li>• Emits audit event</li>
+        </ul>
+      </div>
+      <div class="p-4 bg-slate-900/50 rounded">
+        <div class="text-indigo-400 font-mono mb-2">[3] Re-verify (any party)</div>
+        <ul class="text-gray-300 space-y-1 text-xs">
+          <li>• Pulls VK + proof + x402 receipt from chain</li>
+          <li>• Runs bb verify client-side</li>
+          <li>• Math doesn't lie</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Persona tabs -->
+  <div class="flex space-x-2 mb-4 border-b border-slate-700">
+    <button onclick="showPersona('trader')" id="tab-trader" class="persona-tab px-6 py-3 font-medium border-b-2 border-transparent hover:text-indigo-400">
+      👤 Trader View
+    </button>
+    <button onclick="showPersona('regulator')" id="tab-regulator" class="persona-tab px-6 py-3 font-medium border-b-2 border-transparent hover:text-indigo-400">
+      🛡️ Regulator View
+    </button>
+    <button onclick="showPersona('public')" id="tab-public" class="persona-tab px-6 py-3 font-medium border-b-2 border-transparent hover:text-indigo-400">
+      🌐 Public View
+    </button>
+  </div>
+
+  <!-- Trader view -->
+  <div id="view-trader" class="persona-view">
+    <h2 class="text-2xl font-semibold mb-4">Your Trades</h2>
+    <div class="bg-slate-800/30 rounded-lg p-4 mb-4 text-sm text-gray-400">
+      As a trader, you see all your trade details including the ZK proof hash. You can independently verify each proof using the public VK.
+    </div>
+    <div id="trader-trades" class="space-y-3"></div>
+  </div>
+
+  <!-- Regulator view -->
+  <div id="view-regulator" class="persona-view hidden">
+    <h2 class="text-2xl font-semibold mb-4">Compliance Audit Trail</h2>
+    <div class="bg-slate-800/30 rounded-lg p-4 mb-4 text-sm text-gray-400">
+      As a regulator, you see ALL trades with full proof attestation. Each trade's proof_hash + policy_hash + attestation_sig can be independently verified.
+    </div>
+    <div class="grid grid-cols-3 gap-4 mb-4">
+      <div class="p-4 bg-slate-800 rounded text-center">
+        <div class="text-gray-400 text-xs">Total Trades</div>
+        <div class="text-3xl font-bold" id="reg-count">0</div>
+      </div>
+      <div class="p-4 bg-slate-800 rounded text-center">
+        <div class="text-gray-400 text-xs">Policy Adherence</div>
+        <div class="text-3xl font-bold text-green-400">100%</div>
+      </div>
+      <div class="p-4 bg-slate-800 rounded text-center">
+        <div class="text-gray-400 text-xs">Total Volume</div>
+        <div class="text-3xl font-bold" id="reg-volume">$0</div>
+      </div>
+    </div>
+    <div id="regulator-trades" class="space-y-3"></div>
+  </div>
+
+  <!-- Public view -->
+  <div id="view-public" class="persona-view hidden">
+    <h2 class="text-2xl font-semibold mb-4">Aggregate Stats (No Strategy Leakage)</h2>
+    <div class="bg-slate-800/30 rounded-lg p-4 mb-4 text-sm text-gray-400">
+      The public sees aggregate statistics only. Individual strategy internals (thresholds, positions) are NEVER revealed. The strategy is provably compliant without leaking its logic.
+    </div>
+    <div class="grid grid-cols-3 gap-4 mb-4">
+      <div class="p-6 bg-slate-800 rounded text-center">
+        <div class="text-gray-400 text-sm mb-2">Total Trades</div>
+        <div class="text-4xl font-bold" id="pub-count">0</div>
+      </div>
+      <div class="p-6 bg-slate-800 rounded text-center">
+        <div class="text-gray-400 text-sm mb-2">Total Volume</div>
+        <div class="text-4xl font-bold" id="pub-volume">$0</div>
+      </div>
+      <div class="p-6 bg-slate-800 rounded text-center">
+        <div class="text-gray-400 text-sm mb-2">Compliance</div>
+        <div class="text-4xl font-bold text-green-400">100%</div>
+      </div>
+    </div>
+    <div class="mt-8 p-4 bg-slate-800/50 border border-slate-700 rounded text-sm">
+      <div class="text-gray-400 mb-2">Why this is privacy-preserving:</div>
+      <div class="text-gray-300 space-y-1">
+        <div>→ Strategy thresholds (<code>buy_threshold</code>, <code>sell_threshold</code>) are <strong>private witnesses</strong> in the ZK proof</div>
+        <div>→ Public sees only that a valid proof exists, not its internals</div>
+        <div>→ Policy rules are <strong>public commitments</strong> the agent must comply with</div>
+        <div>→ On-chain record proves compliance without revealing logic</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run agent button -->
+  <div class="mt-12 p-6 bg-slate-800/50 rounded-lg border border-slate-700">
+    <h2 class="text-2xl font-semibold mb-3">Run Agent (Generate Trade)</h2>
+    <p class="text-gray-400 text-sm mb-4">In the live version: LLM decides → generates proof locally → signs ed25519 attestation → submits to executor on-chain. On this static page, clicking replays a real captured run.</p>
+    <button onclick="runAgent()" id="run-btn" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-medium glow transition">
+      🚀 Run Agent (Submit Trade)
+    </button>
+    <div id="run-status" class="mt-4 text-sm"></div>
+  </div>
+
+  <!-- Negative tests -->
+  <div class="mt-6 p-6 bg-rose-900/20 rounded-lg border border-rose-800/50">
+    <h2 class="text-2xl font-semibold mb-3 text-rose-300">Negative Tests (the punchline)</h2>
+    <p class="text-gray-400 text-sm mb-4">Show what happens when the math is violated. The contract <em>already accepted</em> the original trade — these tests show anyone can re-verify and catch fakes.</p>
+    <div class="flex flex-wrap gap-3">
+      <button onclick="runTamperTest()" id="tamper-btn" class="px-5 py-2 bg-rose-700 hover:bg-rose-800 rounded-lg font-medium">
+        🔥 Tamper Proof Byte (flip 1 bit) → Re-verify
+      </button>
+      <button onclick="runPolicyViolation()" id="policy-btn" class="px-5 py-2 bg-rose-700 hover:bg-rose-800 rounded-lg font-medium">
+        ⚠️ Generate Proof Violating Rate Limit
+      </button>
+    </div>
+    <div id="negative-status" class="mt-4 text-sm font-mono"></div>
+  </div>
+
+</div>
+
+<script>
+const EXECUTOR_ID = 'CDDBMMWA6WYT6ZT5QRBATVEXC3IMVJQ4ZR6TREVL43WWSJ3HOKRMP4OZ';
+const NETWORK = 'local';
+const AGENT_ID = 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT';
+const USER_ID = 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT';
+
+// Frozen real trade records captured from an actual local run of the agent
+// against the deployed executor contract (CDDBMMWA6WYT6ZT5QRBATVEXC3IMVJQ4ZR6TREVL43WWSJ3HOKRMP4OZ
+// on a local Soroban network). Every hash, signature, and tx hash below is
+// a genuine value produced by nargo/bb/the executor — nothing here is
+// fabricated. This static page just replays them instead of calling live.
+let trades = [
+  {
+    trade_id: 15,
+    action: 1,
+    agent_id: 'CDDBMMWA6WYT6ZT5QRBATVEXC3IMVJQ4ZR6TREVL43WWSJ3HOKRMP4OZ',
+    user: 'GA5V55C6ZO5XGSVLPQVLDCJ2U7Y3VKBZQEMZDA5F3B7IITXDTSQ4FFOT',
+    amount: '500000000',
+    market_price: 8277341,
+    market_timestamp: 1783079147,
+    pair_hash: 1,
+    consecutive_losses: 0,
+    policy_hash: '0x296da1c92f3e8cf79f98eab7ba99791b7f4051db50c0a81c0051a9e8f215cfa6',
+    proof_hash: '24ad19de21e05e20eb9a73dd0c7e95bc48ca0f65617d1eb71c2915870414236e',
+    new_state_hash: '0x018fdad27dfb915f5f63e59d680a8d83eb982d5a1321e8049ecfba3753f18ad7',
+    attestation_sig: '01c455be774d3feb0750fbcd0f813cd8635c90a31f30686cd4e5c760ff404483e44b59b2c7e482f0ab619250ffe8e417023f206cf67e5b6f47c49083867a2807',
+    x402_payment_receipt: '0x0e505911da33b8c1cc4695e7d6408306d0041017c02e3cbfa1a3b512ca614134',
+    x402_tx_hash: 'cc9c6503645dfb0d8cc1cc39b78ae47b758aac7f18efb9a18bf4c3400d235ce8',
+    x402_amount_stroops: 1000000,
+    reasoning: 'Deterministic mode: z=-4.150 < -2 (oversold)',
+    strategy_id: 'zscore-mean-reversion-v1',
+    llm_reasoning: 'Deterministic mode (LLM unavailable): strategy signaled action, executing directly.',
+    llm_iterations: 0,
+    llm_tokens: 0,
+    created_at: 1783079151,
+  },
+  {
+    trade_id: 9,
+    action: 1,
+    agent_id: 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT',
+    user: 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT',
+    amount: '500000000',
+    market_price: 8764573,
+    market_timestamp: 1782846721,
+    pair_hash: 1,
+    consecutive_losses: 0,
+    policy_hash: '296da1c92f3e8cf79f98eab7ba99791b7f4051db50c0a81c0051a9e8f215cfa6',
+    proof_hash: '3cbb5846a5e97440486c20d8a04cd0946a85893816ff8b3cf45d1869f3cad947',
+    new_state_hash: '1f6ee5367f18100d097f57b520bdddaadf7faadddb4a3c4dce592f598b02bb96',
+    attestation_sig: 'e1aa8865e3fe89ad599adce776c261039ef4653a1649006cddba0692024656827748419488ed29ebd2592d5dfc4a08864b55e3cb65300801e44271b79f3d8502',
+    x402_payment_receipt: '02708fac32921ac5ac3cdb152356045b64e2ede25ac1ccfe786413a8616ae9f2',
+    x402_tx_hash: null,
+    x402_amount_stroops: null,
+    reasoning: 'Z-score mean reversion signal: oversold below -2σ threshold',
+    strategy_id: 'zscore-mean-reversion-v1',
+    llm_reasoning: '<think>The strategy has generated a BUY signal with high confidence. Let me analyze: Action: BUY, Amount: 500,000,000 (5% of 10,000,000,000 balance - this aligns with the max trade size policy)...</think>',
+    llm_iterations: 3,
+    llm_tokens: 1539,
+    created_at: 1782846730,
+  },
+  {
+    trade_id: 0,
+    action: 1,
+    agent_id: 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT',
+    user: 'GAHA2ALO53N5WN6NYBZQSJUPKZ3TWNCME2WPRR66YVP5AIOY23IXLYRT',
+    amount: '500000000',
+    market_price: 9045089,
+    market_timestamp: 1782765375,
+    pair_hash: 1,
+    consecutive_losses: 0,
+    policy_hash: '296da1c92f3e8cf79f98eab7ba99791b7f4051db50c0a81c0051a9e8f215cfa6',
+    proof_hash: 'dbb86d94a26f6839dce9fac9f1eb7a41270bb24cac2a3de29f87fd1887a320ad',
+    new_state_hash: '07ce589573d0a5975ef3f65dd83ff1425b8ca5b1b9e452a70a6d8785480ec9f5',
+    attestation_sig: '9a90ef27b728f82e14d7fb0be28cb59cf385081ed7754e6b4d7d060788a652d4dac51d496af191ddc7d75c9ce3422d123d3cdcd5014a6447aa83ca0ef2e16e03',
+    x402_payment_receipt: '0ecec5242442cbdd4215d2ccce18939f4886ea547d2b996962b2575015e5d7f8',
+    x402_tx_hash: null,
+    x402_amount_stroops: null,
+    reasoning: 'Deterministic mode: z=-4.150 < -2 (oversold)',
+    strategy_id: 'zscore-mean-reversion-v1',
+    llm_reasoning: null,
+    llm_iterations: null,
+    llm_tokens: null,
+    created_at: 1782765376,
+  },
+];
+
+function showPersona(p) {
+  document.querySelectorAll('.persona-view').forEach(v => v.classList.add('hidden'));
+  document.querySelectorAll('.persona-tab').forEach(b => {
+    b.classList.remove('border-indigo-400', 'text-indigo-400');
+    b.classList.add('border-transparent');
+  });
+  document.getElementById(`view-${p}`).classList.remove('hidden');
+  document.getElementById(`tab-${p}`).classList.add('border-indigo-400', 'text-indigo-400');
+}
+
+function renderTrades() {
+  // Live stats
+  const total = trades.length;
+  const buys = trades.filter(t => t.action === 1).length;
+  const sells = trades.filter(t => t.action === 2).length;
+  const totalXlm = trades.reduce((s, t) => s + (t.x402_amount_stroops || 0), 0) / 1e7;
+  const llmIters = trades.reduce((s, t) => s + (t.llm_iterations || 0), 0);
+  document.getElementById('stats').innerHTML = `
+    <div class="p-4 bg-slate-900/50 rounded"><div class="text-xs text-gray-500">Trades</div><div class="text-2xl font-bold">${total}</div></div>
+    <div class="p-4 bg-slate-900/50 rounded"><div class="text-xs text-gray-500">Buys / Sells</div><div class="text-2xl font-bold text-green-400">${buys}<span class="text-gray-600">/</span><span class="text-red-400">${sells}</span></div></div>
+    <div class="p-4 bg-slate-900/50 rounded"><div class="text-xs text-gray-500">x402 paid</div><div class="text-2xl font-bold">${totalXlm.toFixed(2)} <span class="text-sm text-gray-500">XLM</span></div></div>
+    <div class="p-4 bg-slate-900/50 rounded"><div class="text-xs text-gray-500">Compliance</div><div class="text-2xl font-bold text-green-400">100%</div></div>
+    <div class="p-4 bg-slate-900/50 rounded"><div class="text-xs text-gray-500">LLM iters</div><div class="text-2xl font-bold">${llmIters}</div></div>
+  `;
+
+  // Trader view
+  document.getElementById('trader-trades').innerHTML = trades.map(t => `
+    <div class="p-4 bg-slate-800/50 rounded border border-slate-700">
+      <div class="flex justify-between items-start mb-2">
+        <div>
+          <div class="text-lg font-bold">Trade #${t.trade_id} — ${t.action === 1 ? '🟢 BUY' : t.action === 2 ? '🔴 SELL' : '⚪ HOLD'}</div>
+          <div class="text-sm text-gray-400">${new Date(t.created_at * 1000).toLocaleString()}</div>
+        </div>
+        <div class="text-right">
+          <div class="text-2xl font-bold">$${(t.amount / 1e7).toFixed(2)}</div>
+          <div class="text-xs text-gray-500">@ $${(t.market_price / 100).toFixed(2)}</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-xs font-mono mt-3">
+        <div class="bg-slate-900/50 p-2 rounded">
+          <div class="text-gray-500">proof_hash</div>
+          <div class="text-indigo-300 truncate">${t.proof_hash}</div>
+        </div>
+        <div class="bg-slate-900/50 p-2 rounded">
+          <div class="text-gray-500">policy_hash</div>
+          <div class="text-indigo-300 truncate">${t.policy_hash}</div>
+        </div>
+        <div class="bg-slate-900/50 p-2 rounded">
+          <div class="text-gray-500">x402_receipt</div>
+          <div class="text-indigo-300 truncate">${t.x402_payment_receipt}</div>
+        </div>
+        <div class="bg-slate-900/50 p-2 rounded">
+          <div class="text-gray-500">attestation_sig</div>
+          <div class="text-indigo-300 truncate">${t.attestation_sig.slice(0, 32)}…</div>
+        </div>
+      </div>
+      <div class="mt-3 flex gap-2">
+        <button onclick="reVerify(${t.trade_id})" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-sm font-medium">
+          🔍 Re-verify Proof + Attestation
+        </button>
+        <div id="verify-${t.trade_id}" class="text-sm flex-1 self-center"></div>
+      </div>
+      ${t.llm_reasoning ? `
+      <details class="mt-3 bg-slate-900/30 rounded p-3 text-xs">
+        <summary class="cursor-pointer text-indigo-300 font-mono">🤖 LLM reasoning (${t.llm_iterations || '?'} iterations, ${t.llm_tokens || '?'} tokens)</summary>
+        <pre class="whitespace-pre-wrap text-gray-300 mt-2 text-xs">${t.llm_reasoning.slice(0, 800)}</pre>
+      </details>` : ''}
+    </div>
+  `).join('') || '<div class="text-gray-500 text-center py-8">No trades yet. Click "Run Agent" above.</div>';
+
+  // Regulator view — full audit trail with proof details
+  document.getElementById('regulator-trades').innerHTML = trades.map(t => `
+    <div class="p-4 bg-slate-800/50 rounded border border-slate-700">
+      <div class="flex justify-between items-start mb-2">
+        <div>
+          <div class="text-lg font-bold">Trade #${t.trade_id} — ${t.action === 1 ? '🟢 BUY' : t.action === 2 ? '🔴 SELL' : '⚪ HOLD'}</div>
+          <div class="text-sm text-gray-400">${new Date(t.created_at * 1000).toLocaleString()}</div>
+        </div>
+        <div class="text-green-400 font-bold">✓ Policy Compliant</div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-xs font-mono mt-3">
+        <div class="bg-slate-900/50 p-2 rounded">
+          <div class="text-gray-500">agent_id</div>
+          <div class="text-indigo-300 truncate">${t.agent_id?.slice(0, 16)}…</div>
+        </div>
+        <div class="bg-slate-900/50 p-2 rounded">
+          <div class="text-gray-500">pair</div>
+          <div class="text-indigo-300">${t.pair_hash === 1 ? 'USDC/EURC' : 'USDC/XLM'}</div>
+        </div>
+        <div class="bg-slate-900/50 p-2 rounded">
+          <div class="text-gray-500">policy_hash</div>
+          <div class="text-indigo-300 truncate">${t.policy_hash?.slice(0, 24)}…</div>
+        </div>
+        <div class="bg-slate-900/50 p-2 rounded">
+          <div class="text-gray-500">attestation_sig</div>
+          <div class="text-indigo-300 truncate">${t.attestation_sig?.slice(0, 32)}…</div>
+        </div>
+        <div class="bg-slate-900/50 p-2 rounded">
+          <div class="text-gray-500">x402 tx (off-chain)</div>
+          <div class="text-indigo-300 truncate">${t.x402_tx_hash?.slice(0, 32) || '—'}…</div>
+        </div>
+        <div class="bg-slate-900/50 p-2 rounded">
+          <div class="text-gray-500">x402 amount</div>
+          <div class="text-indigo-300">${((t.x402_amount_stroops || 0) / 1e7).toFixed(2)} XLM</div>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-3">
+        <button onclick="reVerify(${t.trade_id})" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-xs font-medium">
+          🔍 Re-verify bb proof
+        </button>
+        <div id="verify-reg-${t.trade_id}" class="text-xs flex-1 self-center"></div>
+      </div>
+    </div>
+  `).join('');
+
+  // Aggregate stats
+  document.getElementById('reg-count').textContent = trades.length;
+  document.getElementById('pub-count').textContent = trades.length;
+  const totalVol = trades.reduce((sum, t) => sum + Number(t.amount), 0) / 1e7;
+  document.getElementById('reg-volume').textContent = '$' + totalVol.toFixed(2);
+  document.getElementById('pub-volume').textContent = '$' + totalVol.toFixed(2);
+}
+
+// ============================================================
+// STATIC SHOWCASE MODE
+// No backend here. Every function below replays real captured
+// output from an actual local run instead of calling a live API.
+// Source of truth: agent/.data/agent.db trade records + terminal
+// transcripts from the corresponding demo/server.js endpoints.
+// ============================================================
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function loadTrades() {
+  renderTrades();
+}
+
+async function runAgent() {
+  const btn = document.getElementById('run-btn');
+  const status = document.getElementById('run-status');
+  btn.disabled = true;
+  const waitingMessages = [
+    '⏳ LLM orchestrating cycle...',
+    '⏳ Fetching market data...',
+    '⏳ Running z-score strategy...',
+    '⏳ Generating ZK proof (UltraHonk)...',
+    '⏳ Sending x402 payment (0.1 XLM)...',
+    '⏳ Signing ed25519 attestation...',
+    '⏳ Submitting to Soroban executor...',
+  ];
+  for (const msg of waitingMessages) {
+    status.innerHTML = `<div class="text-yellow-400">${msg}</div>`;
+    await sleep(450);
+  }
+
+  // Real captured output from an actual run (trade_id 15 on the deployed
+  // executor). Static page — this replays it rather than submitting again.
+  const captured = trades[0];
+  status.innerHTML = `
+    <div class="p-3 bg-green-900/30 border border-green-700 rounded">
+      <div class="text-green-400 font-bold">✅ Trade executed on-chain! <span class="text-xs font-normal text-amber-300">(replayed capture — static page)</span></div>
+      <div class="text-xs font-mono mt-2 text-gray-400">Trade ID: ${captured.trade_id}</div>
+      <div class="text-xs font-mono text-gray-400">x402 receipt: ${captured.x402_payment_receipt}</div>
+      <div class="text-xs font-mono text-gray-400">proof_hash: ${captured.proof_hash}</div>
+      <div class="text-xs font-mono text-gray-400">x402 tx: ${captured.x402_tx_hash}</div>
+    </div>
+  `;
+  btn.disabled = false;
+}
+
+async function runTamperTest() {
+  const btn = document.getElementById('tamper-btn');
+  const status = document.getElementById('negative-status');
+  const id = trades[0].trade_id;
+  btn.disabled = true;
+  status.innerHTML = `<div class="text-yellow-400">⏳ Flipping 1 bit in proof for trade #${id} and re-verifying...</div>`;
+  await sleep(900);
+
+  // Real captured bb output for this exact test, run against trade_id 0:
+  //   Scheme is: ultra_honk
+  //   Proof verification failed
+  //   {"trade_id":0,"original_byte":0,"tampered_byte":1,
+  //    "bb_valid_after_tamper":false,
+  //    "explanation":"Math detected the tamper: bb verify rejected the mutated proof"}
+  status.innerHTML = `
+    <div class="p-3 bg-slate-900/50 border border-rose-800 rounded">
+      <div class="font-bold text-rose-300">🔥 Negative Test #1: 1-bit Proof Tamper <span class="text-xs font-normal text-amber-300">(real captured bb output)</span></div>
+      <div class="text-xs text-gray-400 mt-1">Original byte 0 → tampered byte 1 (trade #0's proof)</div>
+      <div class="mt-2"><span class="text-green-400">✅ Tamper detected: bb verify REJECTED the mutated proof</span></div>
+      <div class="text-xs text-gray-500 mt-2">Math detected the tamper: bb verify rejected the mutated proof</div>
+      <pre class="text-xs text-gray-600 mt-2 whitespace-pre-wrap">Scheme is: ultra_honk
+Proof verification failed</pre>
+    </div>
+  `;
+  btn.disabled = false;
+}
+
+async function runPolicyViolation() {
+  const btn = document.getElementById('policy-btn');
+  const status = document.getElementById('negative-status');
+  btn.disabled = true;
+  status.innerHTML = '<div class="text-yellow-400">⏳ Writing malicious Prover.toml (last_trade_ts = market_ts) and running nargo execute...</div>';
+  await sleep(900);
+
+  // Real captured nargo output from this exact test:
+  //   {"rejected":true,"message":"Circuit rejected the policy violation",
+  //    "explanation":"The ZK circuit enforces policy at proof-generation
+  //    time — no way to fake a compliant trade"}
+  status.innerHTML = `
+    <div class="p-3 bg-slate-900/50 border border-rose-800 rounded">
+      <div class="font-bold text-rose-300">⚠️ Negative Test #2: Policy Violation Attempt <span class="text-xs font-normal text-amber-300">(real captured nargo output)</span></div>
+      <div class="mt-2"><span class="text-green-400">✅ Circuit rejected the policy violation</span></div>
+      <div class="text-xs text-gray-500 mt-2">The ZK circuit enforces policy at proof-generation time — no way to fake a compliant trade</div>
+      <pre class="text-xs text-gray-600 mt-2 whitespace-pre-wrap">error: Assertion failed: rate limit violated
+   ┌─ src/main.nr
+   │  assert(time_since_last >= min_time_u, "rate limit violated");
+Failed assertion</pre>
+    </div>
+  `;
+  btn.disabled = false;
+}
+
+async function reVerify(tradeId) {
+  const statusEl = document.getElementById(`verify-${tradeId}`) || document.getElementById(`verify-reg-${tradeId}`);
+  if (!statusEl) return;
+  statusEl.innerHTML = '<span class="text-yellow-400">⏳ Verifying...</span>';
+  await sleep(600);
+
+  // All three frozen trades were bb-verified genuinely valid during capture.
+  statusEl.innerHTML = `
+    <span class="text-green-400 font-bold">✅ VERIFIED</span>
+    <span class="text-xs text-gray-400 ml-2">bb verify: ✅ | ed25519: ✅</span>
+    <span class="text-xs text-amber-300 ml-2">(replayed capture)</span>
+  `;
+}
+
+// Init
+showPersona('trader');
+loadTrades();
+</script>
+
+</body>
+</html>
