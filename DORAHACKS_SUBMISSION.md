@@ -35,7 +35,7 @@ An AI trading agent whose private strategy stays secret, but whose compliance wi
 ## GitHub URL
 
 ```
-https://github.com/capGoblin/stellar-private-agent
+https://github.com/capGoblin/provably-private-agent
 ```
 
 ---
@@ -67,6 +67,15 @@ actual thresholds never leave the private witness. The proof plus an
 ed25519 attestation goes to a Soroban executor contract; a real 0.1 XLM
 x402 payment gates the cycle. Anyone can pull the proof back off-chain and
 re-verify the math themselves — no need to trust the executor.
+
+Three personas see three views of the same on-chain data, from the same
+proofs:
+- **Trader** — full trade history, proof hashes, and a "re-verify" button
+  that re-runs `bb verify` client-side.
+- **Regulator** — the complete audit trail: attestation signatures, policy
+  hashes, x402 payment tx hashes, agent identity.
+- **Public** — aggregate volume and compliance rate only. No strategy
+  internals, ever.
 
 ## Numbers that are checkable, not claimed
 
@@ -108,11 +117,15 @@ fast: Stellar's RWA market cap (ex-stablecoins) went from $796M to $1.52B
 in one quarter (+91% QoQ) via Franklin Templeton's BENJI, Ondo, WisdomTree.
 And leveraged perps are launching on Stellar for the first time in 2026
 (Rails, Stellars Finance) — so no incumbent privacy/compliance tooling
-exists yet for that vertical either. Three real audiences, one proof
-pattern: market makers proving exposure limits without revealing spread
-models, RWA operators proving mandate compliance without disclosing
-strategy, perp traders proving leverage caps without revealing position
-size.
+exists yet for that vertical either.
+
+Three real audiences, one proof pattern:
+- **Market makers today** — prove exposure/risk limits without revealing
+  the spread model.
+- **RWA fund operators next** — prove mandate compliance (position limits,
+  allowed assets) without disclosing the strategy to competitors.
+- **Perp traders soon** — prove leverage stays under a venue's cap without
+  revealing the actual leverage used.
 
 ## What's real vs. not yet wired
 
@@ -161,8 +174,8 @@ contract.
 ## Try it
 
 ```
-git clone https://github.com/capGoblin/stellar-private-agent
-cd stellar-private-agent/agent && npx tsx src/index.ts --once   # run the real agent
+git clone https://github.com/capGoblin/provably-private-agent
+cd provably-private-agent/agent && npx tsx src/index.ts --once   # run the real agent
 cd .. && bin/demo.sh                                             # full demo UI + local Soroban network
 ```
 

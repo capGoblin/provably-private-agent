@@ -2,7 +2,7 @@
 
 > Private strategy. Public compliance. On Stellar.
 
-**Repo:** https://github.com/capGoblin/stellar-private-agent
+**Repo:** https://github.com/capGoblin/provably-private-agent
 
 A Zero-Knowledge trading agent whose strategy stays cryptographically private, but whose compliance with public policy is provably enforced. Runs on Stellar, pays via x402, verifiable on Soroban.
 

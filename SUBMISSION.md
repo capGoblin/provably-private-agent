@@ -93,7 +93,7 @@ Two live negative tests in the demo UI:
 
 ## Repo
 
-**https://github.com/capGoblin/stellar-private-agent**
+**https://github.com/capGoblin/provably-private-agent**
 
 8 commits, fully documented README, end-to-end runnable with `npx tsx src/index.ts --once`.
 

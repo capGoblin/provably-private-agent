@@ -47,7 +47,7 @@ npx tsx src/index.ts --once
 > "What about trying to fake a compliant trade that actually violates policy? We write a malicious Prover.toml that violates the rate limit. nargo execute rejects the witness generation. The policy is enforced by the circuit itself — you can't fake compliance."
 
 ### [2:20–2:30] Recap
-> "Three real components: an LLM agent, an UltraHonk ZK proof, and a Soroban executor. The strategy is provably private. The compliance is provably public. Both verified by the same math. Repo: github.com/capGoblin/stellar-private-agent. Thanks."
+> "Three real components: an LLM agent, an UltraHonk ZK proof, and a Soroban executor. The strategy is provably private. The compliance is provably public. Both verified by the same math. Repo: github.com/capGoblin/provably-private-agent. Thanks."
 
 ---
 
