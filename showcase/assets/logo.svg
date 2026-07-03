@@ -1,0 +1,82 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="55%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#a5b4fc" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#a5b4fc" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <!-- faint circuit / proof-graph nodes behind the shield -->
+  <g stroke="#334155" stroke-width="2" opacity="0.55">
+    <line x1="96" y1="120" x2="150" y2="168"/>
+    <line x1="416" y1="120" x2="362" y2="168"/>
+    <line x1="96" y1="392" x2="150" y2="344"/>
+    <line x1="416" y1="392" x2="362" y2="344"/>
+    <line x1="256" y1="60" x2="256" y2="112"/>
+  </g>
+  <g fill="#475569">
+    <circle cx="96" cy="120" r="6"/>
+    <circle cx="416" cy="120" r="6"/>
+    <circle cx="96" cy="392" r="6"/>
+    <circle cx="416" cy="392" r="6"/>
+    <circle cx="256" cy="60" r="6"/>
+  </g>
+
+  <!-- shield: public policy boundary -->
+  <path d="M256 78
+           L378 122
+           V254
+           C378 344 326 400 256 434
+           C186 400 134 344 134 254
+           V122
+           Z"
+        fill="url(#shieldGrad)" filter="url(#softGlow)"/>
+  <path d="M256 78
+           L378 122
+           V254
+           C378 344 326 400 256 434
+           C186 400 134 344 134 254
+           V122
+           Z"
+        fill="none" stroke="#c7d2fe" stroke-width="3" stroke-opacity="0.5"/>
+
+  <!-- inner glow sweep -->
+  <path d="M256 100 L360 138 V254 C360 332 314 380 256 410 Z" fill="url(#glow)" opacity="0.5"/>
+
+  <!-- private strategy: a closed eye (hidden alpha) rendered in dark slate,
+       cut into the indigo shield so it reads as a private core -->
+  <g transform="translate(256,246)">
+    <path d="M-72 4
+             C-40 -46 40 -46 72 4
+             C40 54 -40 54 -72 4 Z"
+          fill="#0f172a"/>
+    <circle cx="0" cy="4" r="30" fill="#1e293b"/>
+    <circle cx="0" cy="4" r="15" fill="#0f172a"/>
+    <!-- closed-eye slash: strategy is hidden -->
+    <line x1="-84" y1="4" x2="84" y2="4" stroke="#6366f1" stroke-width="10" stroke-linecap="round"/>
+  </g>
+
+  <!-- checkmark: compliance proven, sitting just below -->
+  <path d="M204 318 L240 352 L318 276"
+        fill="none" stroke="#eef2ff" stroke-width="16"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
