@@ -66,3 +66,6 @@ __pycache__/
 
 # External clone (downloaded separately by user)
 contracts/verifier/
+
+# Circuit build artifacts
+circuits/*/target/

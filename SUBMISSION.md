@@ -14,6 +14,10 @@ An AI trading agent whose private strategy stays secret, but whose compliance wi
 
 ## Long Description
 
+**Positioning: compliance infrastructure for automated trading on Stellar's institutional rails.** Every liquid market on Stellar is made by bots (the Kelp market-making culture); the institutions arriving via RWAs ($1.5B, +91% QoQ — Franklin Templeton, Ondo, WisdomTree) come with compliance mandates; and perps are launching on Stellar in 2026 (Rails, Stellars Finance). All three need the same thing: **provably well-behaved algorithms whose strategy stays private.**
+
+This is a framework, not a single app. The **PolicyProof pattern** — private witnesses = strategy params + salt, public inputs = market state + policy, outputs = (action, size, state_hash, policy_hash) — ships with two circuit instantiations: `strategy_policy` (spot DEX, live in the demo end-to-end) and `perp_policy` (leverage cap, margin floor, notional cap — proves "my leverage ≤ the 5x cap" without revealing if it's 2x or 4.9x; full nargo + bb pipeline verified). Adding a vertical = one Noir file + one TS strategy class.
+
 Hedge funds have alpha worth protecting. Regulators need compliance visibility. These two needs conflict.
 
 **Provably Private Agent** resolves the conflict with Zero-Knowledge proofs:

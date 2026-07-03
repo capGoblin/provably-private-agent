@@ -34,10 +34,18 @@ export interface ProofOutput {
 }
 
 export class ZKProver {
-  private circuitDir = path.join(process.cwd(), '..', 'circuits', 'strategy_policy');
+  // PolicyProof circuits are pluggable: any circuit under circuits/<name>
+  // that follows the pattern (private strategy witnesses + public
+  // market/policy inputs -> (action, size, new_state_hash, policy_hash))
+  // works here. strategy_policy = spot DEX, perp_policy = perps.
+  private circuitDir: string;
   private nargoPath: string;
 
-  constructor(private readonly bbPath: string = config.bbPath) {
+  constructor(
+    private readonly bbPath: string = config.bbPath,
+    private readonly circuitName: string = process.env.POLICY_CIRCUIT || 'strategy_policy',
+  ) {
+    this.circuitDir = path.join(process.cwd(), '..', 'circuits', this.circuitName);
     this.nargoPath = process.env.NARGO_BIN || path.join(process.cwd(), '..', '.nargo', 'bin', 'nargo');
   }
 
@@ -57,8 +65,8 @@ export class ZKProver {
     execSync(
       `${this.bbPath} prove \
   --scheme ultra_honk --oracle_hash keccak \
-  --bytecode_path ./target/strategy_policy.json \
-  --witness_path ./target/strategy_policy.gz \
+  --bytecode_path ./target/${this.circuitName}.json \
+  --witness_path ./target/${this.circuitName}.gz \
   --output_path ./target \
   --output_format bytes_and_fields`,
       { cwd: this.circuitDir, encoding: 'utf8' },

@@ -159,6 +159,45 @@ The agent handles all proof generation, attestation, and on-chain submission. No
 
 ---
 
+## The PolicyProof Pattern (this is a framework, not one circuit)
+
+Every circuit in `circuits/` follows the same contract, which makes the whole
+system generic across trading verticals:
+
+```
+PRIVATE witnesses  =  strategy params + secret salt     (the alpha — never leaves your machine)
+PUBLIC inputs      =  market state + agent state
+                      + policy_hash + policy fields      (what the venue/regulator dictates)
+OUTPUTS            =  (action, size, new_state_hash, policy_hash)
+```
+
+And every circuit enforces the same three invariants:
+
+1. **Policy binding** — `assert(hash(policy fields) == policy_hash)`: you cannot prove against a looser policy than the one committed on-chain.
+2. **Strategy commitment** — private params + salt hashed into a commitment: the proof is bound to one specific strategy, but the params stay hidden.
+3. **Derived decision** — the action is *computed inside the circuit* from private params + public market state, never claimed: you cannot submit a BUY proof when your strategy said HOLD.
+
+Two instantiations ship today:
+
+| Circuit | Vertical | Private (hidden) | Public policy (enforced) |
+|---|---|---|---|
+| `strategy_policy` | Spot DEX (live in the demo) | buy/sell thresholds, period, position, secret | max trade size %, pair whitelist, rate limit, loss circuit-breaker |
+| `perp_policy` | Perps (Rails / Stellars Finance are launching perps on Stellar in 2026) | entry/exit thresholds, **target leverage**, prev notional, secret | **max leverage**, **min margin ratio**, max position notional, rate limit |
+
+The perp circuit proves things like *"my leverage is ≤ the venue's 5x cap"*
+without revealing whether it's 2x or 4.9x. All 8 of its tests pass and the
+full pipeline works: `nargo execute → bb prove → bb verify` ✅.
+
+The agent side is equally pluggable: strategies are TS classes behind a
+`Strategy` interface (`agent/src/strategies/`), and the prover takes a
+circuit name (`POLICY_CIRCUIT=perp_policy` env var, defaults to
+`strategy_policy`). Adding a third vertical (RWA mandate compliance,
+market-maker exposure limits) = one new `.nr` file following the pattern +
+one TS strategy class. Same executor contract, same attestation flow, same
+demo.
+
+---
+
 ## Architecture Choice: Why Off-chain Verify + On-chain Attest
 
 We deliberately separated proof verification from proof storage:

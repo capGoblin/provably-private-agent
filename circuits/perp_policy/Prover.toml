@@ -1,0 +1,17 @@
+# LONG at 3x leverage, complies with policy
+entry_threshold = "30"
+exit_threshold = "70"
+target_leverage = "3"
+position_notional_prev = "0"
+secret = "16045690984833335023"
+
+mark_price = "2000"
+market_timestamp = "1700000000"
+funding_rate_bps = "10"
+collateral = "10000000000"
+last_trade_ts = "0"
+policy_hash = "21282672706933915637069242757960159648346804839619919320892065770114881972582"
+max_leverage = "5"
+min_margin_ratio_bps = "1500"
+max_position_notional = "100000000000"
+min_time_between_trades = "60"
